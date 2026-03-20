@@ -9,17 +9,22 @@ pub fn auth_modals() -> Markup {
                 h2 class="nes-text is-primary" { "Login" }
 
                 div class="tabs" {
-                    div class="tab is-active" data-target="privateKeyLogin" { "Private Key" }
-                    div class="tab" data-target="extensionLogin" { "Browser Extension" }
+                    div class="tab is-active" data-target="usernameLogin" { "Username" }
+                    div class="tab" data-target="extensionLogin" { "Extension" }
+                    div class="tab" data-target="recoveryLogin" { "Recovery Key" }
                 }
 
-                div id="privateKeyLogin" class="tab-content is-active" {
+                div id="usernameLogin" class="tab-content is-active" {
                     div class="nes-field" {
-                        label for="loginPrivateKey" { "Private Key:" }
-                        input type="password" id="loginPrivateKey" class="nes-input";
-                        p id="privateKeyError" class="help-text" {}
+                        label for="loginUsername" { "Username:" }
+                        input type="text" id="loginUsername" class="nes-input" autocomplete="username";
                     }
-                    button id="loginButton" class="nes-btn is-primary" { "Login" }
+                    div class="nes-field" style="margin-top: 10px;" {
+                        label for="loginPassword" { "Password:" }
+                        input type="password" id="loginPassword" class="nes-input" autocomplete="current-password";
+                    }
+                    p id="usernameLoginError" class="help-text" {}
+                    button id="usernameLoginButton" class="nes-btn is-primary" style="margin-top: 10px;" { "Login" }
                 }
 
                 div id="extensionLogin" class="tab-content" {
@@ -28,6 +33,15 @@ pub fn auth_modals() -> Markup {
                         "Connect with Extension"
                     }
                     p id="extensionLoginError" class="help-text" {}
+                }
+
+                div id="recoveryLogin" class="tab-content" {
+                    div class="nes-field" {
+                        label for="loginPrivateKey" { "Recovery Key (nsec):" }
+                        input type="password" id="loginPrivateKey" class="nes-input";
+                        p id="privateKeyError" class="help-text" {}
+                    }
+                    button id="loginButton" class="nes-btn is-primary" { "Login" }
                 }
 
                 p class="nes-text" style="margin-top: 20px;" {
@@ -44,38 +58,56 @@ pub fn auth_modals() -> Markup {
                 h2 class="nes-text is-success" { "Create Account" }
 
                 div class="tabs" {
-                    div class="tab is-active" data-target="registerPrivateKey" { "Private Key" }
-                    div class="tab" data-target="registerExtension" { "Browser Extension" }
+                    div class="tab is-active" data-target="registerUsername" { "Username" }
+                    div class="tab" data-target="registerExtension" { "Extension" }
                 }
 
-                div id="registerPrivateKey" class="tab-content is-active" {
-                    div id="registerStep1" {
-                        p {
-                            "Copy and put this private key in a safe place. "
-                            "Without it, you will not be able to access your account."
-                        }
+                // Username/password registration
+                div id="registerUsername" class="tab-content is-active" {
+                    div id="usernameRegisterStep1" {
                         div class="nes-field" {
-                            input type="text" id="privateKeyDisplay" class="nes-input" readonly;
+                            label for="registerUsernameInput" { "Username:" }
+                            input type="text" id="registerUsernameInput" class="nes-input"
+                                placeholder="3-32 chars, starts with letter" autocomplete="username";
                         }
-                        button id="copyPrivateKey" class="nes-btn is-warning" {
-                            "Copy to clipboard"
+                        div class="nes-field" style="margin-top: 10px;" {
+                            label for="registerPasswordInput" { "Password:" }
+                            input type="password" id="registerPasswordInput" class="nes-input" autocomplete="new-password";
                         }
-
-                        div class="nes-field" style="margin-top: 15px;" {
-                            label {
-                                input type="checkbox" id="privateKeySavedCheckbox" class="nes-checkbox";
-                                span { "I have saved my private key" }
-                            }
+                        div class="nes-field" style="margin-top: 10px;" {
+                            label for="registerPasswordConfirm" { "Confirm Password:" }
+                            input type="password" id="registerPasswordConfirm" class="nes-input" autocomplete="new-password";
                         }
-
-                        button id="registerStep1Button" class="nes-btn is-success" disabled {
-                            "Complete Registration"
+                        p class="nes-text" style="font-size: 0.7em; margin-top: 8px;" {
+                            "Min 8 characters"
+                        }
+                        p id="usernameRegisterError" class="help-text" {}
+                        button id="usernameRegisterButton" class="nes-btn is-success" style="margin-top: 10px;" {
+                            "Create Account"
                         }
                     }
 
-                    div id="registerStep2" class="is-hidden" {
-                        h3 class="nes-text is-success" { "Registration Complete!" }
-                        p { "Your account has been created successfully." }
+                    div id="usernameRegisterStep2" class="is-hidden" {
+                        h3 class="nes-text is-warning" { "Save Your Recovery Key!" }
+                        p {
+                            "This is the only way to recover your account. "
+                            "Copy it and store it somewhere safe."
+                        }
+                        div class="nes-field" style="margin-top: 10px;" {
+                            input type="text" id="recoveryKeyDisplay" class="nes-input" readonly;
+                        }
+                        button id="copyRecoveryKey" class="nes-btn is-warning" style="margin-top: 10px;" {
+                            "Copy to clipboard"
+                        }
+                        div class="nes-field" style="margin-top: 15px;" {
+                            label {
+                                input type="checkbox" id="recoveryKeySavedCheckbox" class="nes-checkbox";
+                                span { "I have saved my recovery key" }
+                            }
+                        }
+                        button id="usernameRegisterComplete" class="nes-btn is-success" style="margin-top: 10px;" disabled {
+                            "Continue"
+                        }
                     }
                 }
 

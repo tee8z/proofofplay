@@ -1,4 +1,6 @@
 mod core;
+#[cfg(target_arch = "wasm32")]
+mod password_crypto;
 mod types;
 
 #[cfg(target_arch = "wasm32")]

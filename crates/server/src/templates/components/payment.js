@@ -204,11 +204,17 @@ class PaymentHandler {
 // Initialize payment handler
 window.gamePayment = new PaymentHandler();
 
-document.addEventListener("DOMContentLoaded", function () {
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function () {
+        if (window.gamePayment) {
+            window.gamePayment.init();
+        }
+    });
+} else {
     if (window.gamePayment) {
         window.gamePayment.init();
     }
-});
+}
 
 // Re-initialize after HTMX swaps
 document.body.addEventListener("htmx:afterSwap", function () {

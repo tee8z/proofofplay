@@ -56,91 +56,72 @@ pub async fn check_payment_status(
         ));
     }
 
-    // Check with Lightning API
+    // Check with Lightning provider
     match state
-        .lightning_service
-        .get_payment_status(&payment_id)
+        .lightning_provider
+        .check_payment_status(&payment_id)
         .await
     {
-        Ok(Some(api_payment)) => {
-            let status = api_payment["status"].as_str().unwrap_or("unknown");
-
-            match status {
-                "completed" => {
-                    // Update our record
-                    if let Err(e) = state
-                        .payment_store
-                        .update_payment_status(&payment_id, "paid")
-                        .await
-                    {
-                        error!("Failed to update payment status: {}", e);
-                    }
-
-                    // Publish game entry to audit ledger
-                    if let Err(e) = state
-                        .ledger_service
-                        .publish_game_entry(
-                            &user.nostr_pubkey,
-                            &payment_id,
-                            payment.amount_sats,
-                            "", // session_id not available here, that's ok
-                            &OffsetDateTime::now_utc().date().to_string(),
-                        )
-                        .await
-                    {
-                        warn!("Failed to publish game entry to ledger: {}", e);
-                    }
-
-                    Ok((
-                        StatusCode::OK,
-                        Json(json!({
-                            "status": "paid",
-                            "payment_id": payment_id
-                        })),
-                    ))
+        Ok(result) => match result.status.as_str() {
+            "paid" => {
+                if let Err(e) = state
+                    .payment_store
+                    .update_payment_status(&payment_id, "paid")
+                    .await
+                {
+                    error!("Failed to update payment status: {}", e);
                 }
-                "failed" => {
-                    // Update our record
-                    if let Err(e) = state
-                        .payment_store
-                        .update_payment_status(&payment_id, "failed")
-                        .await
-                    {
-                        error!("Failed to update payment status: {}", e);
-                    }
 
-                    Ok((
-                        StatusCode::OK,
-                        Json(json!({
-                            "status": "failed",
-                            "payment_id": payment_id
-                        })),
-                    ))
+                if let Err(e) = state
+                    .ledger_service
+                    .publish_game_entry(
+                        &user.nostr_pubkey,
+                        &payment_id,
+                        payment.amount_sats,
+                        "",
+                        &OffsetDateTime::now_utc().date().to_string(),
+                    )
+                    .await
+                {
+                    warn!("Failed to publish game entry to ledger: {}", e);
                 }
-                _ => Ok((
+
+                Ok((
                     StatusCode::OK,
                     Json(json!({
-                        "status": "pending",
+                        "status": "paid",
                         "payment_id": payment_id
                     })),
-                )),
+                ))
             }
-        }
-        Ok(None) => {
-            // Payment not found in Lightning API, consider it pending
-            Ok((
+            "failed" => {
+                if let Err(e) = state
+                    .payment_store
+                    .update_payment_status(&payment_id, "failed")
+                    .await
+                {
+                    error!("Failed to update payment status: {}", e);
+                }
+
+                Ok((
+                    StatusCode::OK,
+                    Json(json!({
+                        "status": "failed",
+                        "payment_id": payment_id
+                    })),
+                ))
+            }
+            _ => Ok((
                 StatusCode::OK,
                 Json(json!({
                     "status": "pending",
-                    "payment_id": payment_id,
-                    "message": "Payment not found in Lightning API yet"
+                    "payment_id": payment_id
                 })),
-            ))
-        }
+            )),
+        },
         Err(e) => {
-            error!("Error checking payment status with Lightning API: {}", e);
+            error!("Error checking payment status with Lightning provider: {}", e);
 
-            // Return current status from our database
             Ok((
                 StatusCode::OK,
                 Json(json!({
@@ -435,22 +416,13 @@ pub async fn claim_prize(
         }
     };
 
-    // Process payment (could be done asynchronously in production)
-    // For now, we'll do it synchronously
+    // Process payment
     match state
-        .lightning_service
-        .pay_winner_invoice(
-            &request.invoice,
-            updated_prize.amount_sats * 1000, // Convert to msats
-        )
+        .lightning_provider
+        .send_payment(&request.invoice, updated_prize.amount_sats)
         .await
     {
-        Ok(payment_result) => {
-            // Updated for Value type: extract payment ID
-            let payment_id = payment_result["id"]
-                .as_str()
-                .unwrap_or("unknown")
-                .to_string();
+        Ok(payment_id) => {
 
             // Update the prize record
             match state

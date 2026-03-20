@@ -38,9 +38,9 @@ use crate::{
     file_utils::create_folder, game_handler, get_game_config, get_ledger_events,
     get_ledger_summary, get_server_pubkey, get_top_scores, get_user_scores, health_check,
     home_handler, index_handler, leaderboard_handler, leaderboard_rows_handler, login,
-    nav_fragment_handler, register, run_daily_tasks, secrets::get_key, start_new_session,
-    submit_score, GameStore, LedgerService, LedgerStore, LightningProvider, LightningService,
-    LndClient, PaymentStore, UserStore,
+    login_username, nav_fragment_handler, register, register_username, run_daily_tasks,
+    secrets::get_key, start_new_session, submit_score, GameStore, LedgerService, LedgerStore,
+    LightningProvider, LightningService, LndClient, PaymentStore, UserStore,
 };
 pub struct Application {
     server: Serve<
@@ -225,7 +225,9 @@ pub fn app(app_state: AppState, serve_dir: ServeDir<ServeFile>) -> Router {
 
     let users_endpoints = Router::new()
         .route("/login", post(login))
-        .route("/register", post(register));
+        .route("/register", post(register))
+        .route("/username/register", post(register_username))
+        .route("/username/login", post(login_username));
 
     let game_endpoints = Router::new()
         .route("/config", get(get_game_config))

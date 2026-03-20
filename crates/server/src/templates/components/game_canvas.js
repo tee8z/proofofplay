@@ -530,11 +530,16 @@ function setupStartGameButton() {
     }
 }
 
-// Initialize on DOM load
-document.addEventListener("DOMContentLoaded", function () {
+// Initialize immediately (this script loads dynamically after DOMContentLoaded)
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function () {
+        initializeElements();
+        setupStartGameButton();
+    });
+} else {
     initializeElements();
     setupStartGameButton();
-});
+}
 
 // Re-initialize after HTMX swaps
 document.body.addEventListener("htmx:afterSwap", function () {

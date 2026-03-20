@@ -36,6 +36,9 @@ pub fn get_key<T: SecretKeyHandler>(file_path: &str) -> Result<T, anyhow::Error>
     if metadata(file_path).is_ok() {
         read_key(file_path)
     } else {
+        if let Some(parent) = Path::new(file_path).parent() {
+            std::fs::create_dir_all(parent)?;
+        }
         let key = generate_new_key();
         save_key(file_path, &key)?;
         Ok(key)

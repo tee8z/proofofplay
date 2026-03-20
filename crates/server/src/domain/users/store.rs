@@ -12,6 +12,8 @@ pub struct User {
     pub id: i64,
     pub nostr_pubkey: String,
     pub username: String,
+    pub password_hash: Option<String>,
+    pub encrypted_nsec: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -43,7 +45,7 @@ impl UserStore {
         let user = sqlx::query_as!(
             User,
             r#"
-            SELECT id, nostr_pubkey, username, created_at, updated_at
+            SELECT id, nostr_pubkey, username, password_hash, encrypted_nsec, created_at, updated_at
             FROM users
             WHERE id = ?
             "#,
@@ -59,7 +61,7 @@ impl UserStore {
         let user = sqlx::query_as!(
             User,
             r#"
-            SELECT id, nostr_pubkey, username, created_at, updated_at
+            SELECT id, nostr_pubkey, username, password_hash, encrypted_nsec, created_at, updated_at
             FROM users
             WHERE nostr_pubkey = ?
             "#,
@@ -69,6 +71,33 @@ impl UserStore {
         .await?;
 
         Ok(user)
+    }
+
+    pub async fn find_by_username(&self, username: &str) -> Result<Option<User>, Error> {
+        let user = sqlx::query_as!(
+            User,
+            r#"
+            SELECT id, nostr_pubkey, username, password_hash, encrypted_nsec, created_at, updated_at
+            FROM users
+            WHERE username = ? AND password_hash IS NOT NULL
+            "#,
+            username
+        )
+        .fetch_optional(&self.db)
+        .await?;
+
+        Ok(user)
+    }
+
+    pub async fn username_exists(&self, username: &str) -> Result<bool, Error> {
+        let result = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count: i64" FROM users WHERE username = ? AND password_hash IS NOT NULL"#,
+            username
+        )
+        .fetch_one(&self.db)
+        .await?;
+
+        Ok(result > 0)
     }
 
     pub async fn login(&self, pubkey: String) -> Result<UserInfo, Error> {
@@ -126,6 +155,42 @@ impl UserStore {
         })
     }
 
+    pub async fn register_username_user(
+        &self,
+        nostr_pubkey: String,
+        username: String,
+        password_hash: String,
+        encrypted_nsec: String,
+    ) -> Result<User, Error> {
+        let now = OffsetDateTime::now_utc().to_string();
+
+        let user_id = sqlx::query!(
+            r#"
+            INSERT INTO users (nostr_pubkey, username, password_hash, encrypted_nsec, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            "#,
+            nostr_pubkey,
+            username,
+            password_hash,
+            encrypted_nsec,
+            now,
+            now
+        )
+        .execute(&self.db)
+        .await?
+        .last_insert_rowid();
+
+        Ok(User {
+            id: user_id,
+            nostr_pubkey,
+            username,
+            password_hash: Some(password_hash),
+            encrypted_nsec: Some(encrypted_nsec),
+            created_at: now.clone(),
+            updated_at: now,
+        })
+    }
+
     async fn create_user(&self, pubkey: String, username: String) -> Result<User, Error> {
         let now = OffsetDateTime::now_utc().to_string();
 
@@ -147,6 +212,8 @@ impl UserStore {
             id: user_id,
             nostr_pubkey: pubkey,
             username,
+            password_hash: None,
+            encrypted_nsec: None,
             created_at: now.clone(),
             updated_at: now,
         };

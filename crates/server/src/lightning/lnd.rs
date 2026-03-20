@@ -43,7 +43,7 @@ struct LndStreamedPayment {
 fn hex_to_base64url(hex_str: &str) -> Result<String, LightningError> {
     let bytes = hex::decode(hex_str)
         .map_err(|e| LightningError::ApiError(format!("invalid hex: {}", e)))?;
-    Ok(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&bytes))
+    Ok(base64::engine::general_purpose::URL_SAFE.encode(&bytes))
 }
 
 pub fn base64_to_hex(b64: &str) -> Result<String, LightningError> {

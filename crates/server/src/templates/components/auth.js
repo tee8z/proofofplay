@@ -31,6 +31,9 @@ class AuthClient {
         const loginButton = document.getElementById("loginButton");
         if (loginButton) loginButton.addEventListener("click", () => this.handlePrivateKeyLogin());
 
+        const usernameLoginButton = document.getElementById("usernameLoginButton");
+        if (usernameLoginButton) usernameLoginButton.addEventListener("click", () => this.handleUsernameLogin());
+
         const extensionLoginButton = document.getElementById("extensionLoginButton");
         if (extensionLoginButton) extensionLoginButton.addEventListener("click", () => this.handleExtensionLogin());
 
@@ -53,17 +56,32 @@ class AuthClient {
         const registerStep1Button = document.getElementById("registerStep1Button");
         if (registerStep1Button) registerStep1Button.addEventListener("click", () => this.handleRegistrationComplete());
 
+        const usernameRegisterButton = document.getElementById("usernameRegisterButton");
+        if (usernameRegisterButton) usernameRegisterButton.addEventListener("click", () => this.handleUsernameRegister());
+
         const extensionRegisterButton = document.getElementById("extensionRegisterButton");
         if (extensionRegisterButton) extensionRegisterButton.addEventListener("click", () => this.handleExtensionRegistration());
 
-        const copyPrivateKey = document.getElementById("copyPrivateKey");
-        if (copyPrivateKey) copyPrivateKey.addEventListener("click", () => this.handleCopyPrivateKey());
+        const copyRecoveryKey = document.getElementById("copyRecoveryKey");
+        if (copyRecoveryKey) copyRecoveryKey.addEventListener("click", () => this.handleCopyRecoveryKey());
 
-        const privateKeySavedCheckbox = document.getElementById("privateKeySavedCheckbox");
-        if (privateKeySavedCheckbox) {
-            privateKeySavedCheckbox.addEventListener("change", (e) => {
-                const step1Btn = document.getElementById("registerStep1Button");
-                if (step1Btn) step1Btn.disabled = !e.target.checked;
+        const recoveryKeySavedCheckbox = document.getElementById("recoveryKeySavedCheckbox");
+        if (recoveryKeySavedCheckbox) {
+            recoveryKeySavedCheckbox.addEventListener("change", (e) => {
+                const completeBtn = document.getElementById("usernameRegisterComplete");
+                if (completeBtn) completeBtn.disabled = !e.target.checked;
+            });
+        }
+
+        const usernameRegisterComplete = document.getElementById("usernameRegisterComplete");
+        if (usernameRegisterComplete) {
+            usernameRegisterComplete.addEventListener("click", async () => {
+                try {
+                    await this.login("username");
+                    this.hideRegisterModal();
+                } catch (error) {
+                    console.error("Failed to complete registration login:", error);
+                }
             });
         }
 
@@ -125,7 +143,15 @@ class AuthClient {
 
     showRegisterModal() {
         console.log("Showing register modal");
-        this.handleRegisterInit();
+        // Reset to step 1
+        const step1 = document.getElementById("usernameRegisterStep1");
+        if (step1) step1.classList.remove("is-hidden");
+        const step2 = document.getElementById("usernameRegisterStep2");
+        if (step2) step2.classList.add("is-hidden");
+        const checkbox = document.getElementById("recoveryKeySavedCheckbox");
+        if (checkbox) checkbox.checked = false;
+        const completeBtn = document.getElementById("usernameRegisterComplete");
+        if (completeBtn) completeBtn.disabled = true;
         const modal = document.getElementById("registerModal");
         if (modal) modal.classList.add("is-active");
     }
@@ -158,6 +184,19 @@ class AuthClient {
         }
     }
 
+    async handleCopyRecoveryKey() {
+        const recoveryKeyDisplay = document.getElementById("recoveryKeyDisplay");
+        if (!recoveryKeyDisplay) return;
+        await navigator.clipboard.writeText(recoveryKeyDisplay.value);
+
+        const copyBtn = document.getElementById("copyRecoveryKey");
+        if (copyBtn) {
+            const originalText = copyBtn.textContent;
+            copyBtn.textContent = "Copied!";
+            setTimeout(() => { copyBtn.textContent = originalText; }, 2000);
+        }
+    }
+
     async handleCopyPrivateKey() {
         const privateKeyDisplay = document.getElementById("privateKeyDisplay");
         if (!privateKeyDisplay) return;
@@ -185,7 +224,7 @@ class AuthClient {
 
         try {
             await this.nostrClient.initialize(window.SignerType.PrivateKey, privateKey);
-            await this.login();
+            await this.login("privatekey");
         } catch (error) {
             console.error("Private key login failed:", error);
             if (errorElement) errorElement.textContent = "Login failed. Please check your private key.";
@@ -198,7 +237,7 @@ class AuthClient {
 
         try {
             await this.nostrClient.initialize(window.SignerType.NIP07, null);
-            await this.login();
+            await this.login("extension");
         } catch (error) {
             console.error("Extension login failed:", error);
             if (errorElement) {
@@ -218,7 +257,7 @@ class AuthClient {
         try {
             await this.nostrClient.initialize(window.SignerType.NIP07, null);
             await this.register();
-            await this.login();
+            await this.login("extension");
         } catch (error) {
             console.error("Extension registration failed:", error);
             if (errorElement) {
@@ -231,11 +270,112 @@ class AuthClient {
         }
     }
 
+    async handleUsernameLogin() {
+        const errorElement = document.getElementById("usernameLoginError");
+        if (errorElement) errorElement.textContent = "";
+
+        const username = document.getElementById("loginUsername")?.value || "";
+        const password = document.getElementById("loginPassword")?.value || "";
+
+        if (!username || !password) {
+            if (errorElement) errorElement.textContent = "Please enter username and password";
+            return;
+        }
+
+        try {
+            // Step 1: Verify password and get encrypted nsec
+            const response = await fetch(`${this.apiBase}/api/v1/users/username/login`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username, password }),
+            });
+
+            if (!response.ok) {
+                const msg = await response.text();
+                throw new Error(msg || "Invalid username or password");
+            }
+
+            const { encrypted_nsec } = await response.json();
+
+            // Step 2: Decrypt nsec with password
+            const nsec = window.decryptNsecWithPassword(encrypted_nsec, password);
+
+            // Step 3: Initialize signer with decrypted nsec
+            await this.nostrClient.initialize(window.SignerType.PrivateKey, nsec);
+
+            // Step 4: Do normal nostr-auth login to get session
+            await this.login("username");
+        } catch (error) {
+            console.error("Username login failed:", error);
+            if (errorElement) errorElement.textContent = error.message || "Login failed";
+        }
+    }
+
+    async handleUsernameRegister() {
+        const errorElement = document.getElementById("usernameRegisterError");
+        if (errorElement) errorElement.textContent = "";
+
+        const username = document.getElementById("registerUsernameInput")?.value || "";
+        const password = document.getElementById("registerPasswordInput")?.value || "";
+        const confirmPassword = document.getElementById("registerPasswordConfirm")?.value || "";
+
+        if (!username || !password) {
+            if (errorElement) errorElement.textContent = "Please fill in all fields";
+            return;
+        }
+
+        if (password !== confirmPassword) {
+            if (errorElement) errorElement.textContent = "Passwords do not match";
+            return;
+        }
+
+        try {
+            // Step 1: Generate new nostr keypair
+            await this.nostrClient.initialize(window.SignerType.PrivateKey, null);
+            const nsec = await this.nostrClient.getPrivateKey();
+            const pubkey = await this.nostrClient.getPublicKey();
+
+            // Step 2: Encrypt nsec with password
+            const encrypted_nsec = window.encryptNsecWithPassword(nsec, password);
+
+            // Step 3: Register with server
+            const response = await fetch(`${this.apiBase}/api/v1/users/username/register`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    username,
+                    password,
+                    encrypted_nsec,
+                    nostr_pubkey: pubkey,
+                }),
+            });
+
+            if (!response.ok) {
+                const msg = await response.text();
+                throw new Error(msg || "Registration failed");
+            }
+
+            // Step 4: Show recovery key (encrypted nsec)
+            const step1 = document.getElementById("usernameRegisterStep1");
+            if (step1) step1.classList.add("is-hidden");
+            const step2 = document.getElementById("usernameRegisterStep2");
+            if (step2) step2.classList.remove("is-hidden");
+
+            const recoveryKeyDisplay = document.getElementById("recoveryKeyDisplay");
+            if (recoveryKeyDisplay) recoveryKeyDisplay.value = nsec;
+
+            // Step 5: User must confirm they saved recovery key, then click Continue
+        } catch (error) {
+            console.error("Username registration failed:", error);
+            if (errorElement) errorElement.textContent = error.message || "Registration failed";
+        }
+    }
+
     async handleRegistrationComplete() {
         try {
             await this.register();
             this.showRegistrationSuccess();
-            await this.login();
+            await this.login("privatekey");
         } catch (error) {
             console.error("Registration failed:", error);
         }
@@ -253,6 +393,7 @@ class AuthClient {
     handleLogout() {
         localStorage.removeItem("gameSession");
         localStorage.removeItem("gameUsername");
+        localStorage.removeItem("gameSignerType");
 
         this.nostrClient = new window.NostrClientWrapper();
         this.sessionId = null;
@@ -309,7 +450,7 @@ class AuthClient {
         return response.json();
     }
 
-    async login() {
+    async login(signerType) {
         const response = await this.post(`${this.apiBase}/api/v1/users/login`);
 
         if (!response.ok) {
@@ -322,6 +463,7 @@ class AuthClient {
 
         localStorage.setItem("gameSession", this.sessionId);
         localStorage.setItem("gameUsername", this.username);
+        localStorage.setItem("gameSignerType", signerType || "privatekey");
 
         this.updateAuthUI();
 
@@ -341,21 +483,43 @@ class AuthClient {
     }
 
     restoreSession() {
+        // Only restore if we have a way to authenticate (e.g. NIP-07 extension)
+        // Private key sessions can't survive a page reload since the key isn't stored
+        const signerType = localStorage.getItem("gameSignerType");
         this.sessionId = localStorage.getItem("gameSession");
         this.username = localStorage.getItem("gameUsername");
 
-        if (this.sessionId && this.username) {
-            this.updateAuthUI();
-
-            window.dispatchEvent(
-                new CustomEvent("auth:login", {
-                    detail: {
-                        sessionId: this.sessionId,
-                        username: this.username,
-                    },
+        if (this.sessionId && this.username && signerType === "extension") {
+            // Re-initialize with extension signer
+            this.nostrClient.initialize(window.SignerType.NIP07, null)
+                .then(() => {
+                    this.updateAuthUI();
+                    window.dispatchEvent(
+                        new CustomEvent("auth:login", {
+                            detail: {
+                                sessionId: this.sessionId,
+                                username: this.username,
+                            },
+                        })
+                    );
                 })
-            );
+                .catch(() => {
+                    // Extension not available, clear stale session
+                    this.clearSession();
+                });
+        } else {
+            // No valid signer for restore, clear stale session
+            this.clearSession();
         }
+    }
+
+    clearSession() {
+        localStorage.removeItem("gameSession");
+        localStorage.removeItem("gameUsername");
+        localStorage.removeItem("gameSignerType");
+        this.sessionId = null;
+        this.username = null;
+        this.updateAuthUI();
     }
 
     updateAuthUI() {
@@ -391,8 +555,10 @@ class AuthClient {
     }
 }
 
-// Initialize auth client on DOMContentLoaded
-document.addEventListener("DOMContentLoaded", async function () {
+// Initialize auth client
+// This runs immediately since this script is loaded dynamically after DOMContentLoaded has already fired
+async function initAuth() {
+    console.log("initAuth called, NostrClientWrapper available:", !!window.NostrClientWrapper);
     const apiBase = window.API_BASE || document.body.getAttribute("data-api-base") || "";
     const auth = new AuthClient(apiBase);
     await auth.initialize();
@@ -411,4 +577,10 @@ document.addEventListener("DOMContentLoaded", async function () {
         auth.setupEventListeners();
         auth.updateAuthUI();
     });
-});
+}
+
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function() { initAuth().catch(console.error); });
+} else {
+    initAuth().catch(console.error);
+}

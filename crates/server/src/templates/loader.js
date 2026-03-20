@@ -1,5 +1,5 @@
 // Initialize WASM modules, then load the bundled app JS
-import initNostr, { NostrClientWrapper, SignerType } from '/ui/pkg/nostr_signer/nostr_signer.js';
+import initNostr, { NostrClientWrapper, SignerType, encryptNsecWithPassword, decryptNsecWithPassword } from '/ui/pkg/nostr_signer/nostr_signer.js';
 import initGameEngine, { GameEngine } from '/ui/pkg/game_engine/game_engine.js';
 
 async function initApp() {
@@ -16,6 +16,8 @@ async function initApp() {
     window.NostrClientWrapper = NostrClientWrapper;
     window.SignerType = SignerType;
     window.GameEngine = GameEngine;
+    window.encryptNsecWithPassword = encryptNsecWithPassword;
+    window.decryptNsecWithPassword = decryptNsecWithPassword;
 
     // Set API_BASE from body data attribute
     const apiBase = document.body.getAttribute('data-api-base') || '';

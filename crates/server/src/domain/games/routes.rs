@@ -138,103 +138,8 @@ pub async fn start_new_session(
     {
         Ok(Some(payment)) => payment,
         Ok(None) => {
-            // No pending payment, create a new invoice
-            info!("Creating new payment invoice for user_id: {}", user.id);
-
-            let description = format!("Asteroids Game Entry Fee - User:{}", pubkey);
-
-            // Step 1: Request a new payment from Voltage
-            let payment_id = match state
-                .lightning_service
-                .create_game_invoice(500, Some(&description))
-                .await
-            {
-                Ok(id) => id,
-                Err(e) => {
-                    error!("Failed to create invoice: {}", e);
-                    return Err((
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Failed to create payment invoice",
-                    )
-                        .into_response());
-                }
-            };
-
-            info!(
-                "Created payment with ID: {}, polling for invoice",
-                payment_id
-            );
-
-            // Step 2: Poll for the invoice
-            let mut invoice: Option<String> = None;
-            let max_attempts = 10;
-
-            for attempt in 0..max_attempts {
-                info!("Poll attempt {} for invoice", attempt + 1);
-
-                match state
-                    .lightning_service
-                    .get_payment_invoice(&payment_id)
-                    .await
-                {
-                    Ok(Some(payment_request)) => {
-                        info!("Received invoice on attempt {}", attempt + 1);
-                        invoice = Some(payment_request);
-                        break;
-                    }
-                    Ok(None) => {
-                        // Invoice not available yet, wait and retry
-                        info!("Invoice not available yet, waiting");
-                        tokio::time::sleep(std::time::Duration::from_millis(5000)).await;
-                    }
-                    Err(e) => {
-                        error!("Error getting payment invoice: {}", e);
-                        return Err((
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "Failed to retrieve payment invoice",
-                        )
-                            .into_response());
-                    }
-                }
-            }
-
-            // Step 3: Process the invoice result
-            match invoice {
-                Some(invoice_str) => {
-                    info!("Successfully obtained invoice: {}", invoice_str);
-
-                    // Store the payment in the database
-                    match state
-                        .payment_store
-                        .create_game_payment(user.id, &payment_id, &invoice_str, 500)
-                        .await
-                    {
-                        Ok(payment) => {
-                            // Return payment required response
-                            return Err((
-                                StatusCode::PAYMENT_REQUIRED,
-                                Json(json!({
-                                    "payment_required": true,
-                                    "invoice": payment.invoice,
-                                    "payment_id": payment.payment_id,
-                                    "amount_sats": payment.amount_sats,
-                                    "created_at": payment.created_at
-                                })),
-                            )
-                                .into_response());
-                        }
-                        Err(e) => return Err(map_error(e)),
-                    }
-                }
-                None => {
-                    error!("Failed to get invoice after {} attempts", max_attempts);
-                    return Err((
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Failed to generate Lightning invoice. Please try again.",
-                    )
-                        .into_response());
-                }
-            }
+            // No pending payment, create a new invoice via the unified provider
+            return create_and_return_invoice(&state, user.id, &pubkey).await;
         }
         Err(e) => return Err(map_error(e)),
     };
@@ -245,178 +150,73 @@ pub async fn start_new_session(
         pending_payment.payment_id
     );
 
-    match state
-        .lightning_service
-        .get_payment_status(&pending_payment.payment_id)
-        .await
-    {
-        Ok(Some(payment_status)) => {
-            let status = payment_status["status"].as_str().unwrap_or("unknown");
+    let status_result = state
+        .lightning_provider
+        .check_payment_status(&pending_payment.payment_id)
+        .await;
 
-            match status {
-                "completed" => {
-                    info!(
-                        "Payment {} is completed, updating status",
-                        pending_payment.payment_id
-                    );
+    match status_result {
+        Ok(result) => match result.status.as_str() {
+            "paid" => {
+                info!(
+                    "Payment {} is paid, updating status",
+                    pending_payment.payment_id
+                );
 
-                    // Payment received, update our record
-                    if let Err(e) = state
-                        .payment_store
-                        .update_payment_status(&pending_payment.payment_id, "paid")
-                        .await
-                    {
-                        error!("Failed to update payment status: {}", e);
-                    }
+                if let Err(e) = state
+                    .payment_store
+                    .update_payment_status(&pending_payment.payment_id, "paid")
+                    .await
+                {
+                    error!("Failed to update payment status: {}", e);
+                }
 
-                    // Create a new session
-                    match state.game_store.create_session(user.id).await {
-                        Ok(session) => match state.game_store.create_game_config(&session).await {
-                            Ok(config) => {
-                                Ok((StatusCode::CREATED, Json(NewSessionResponse { config })))
-                            }
-                            Err(e) => Err(map_error(e)),
-                        },
+                // Create a new session
+                match state.game_store.create_session(user.id).await {
+                    Ok(session) => match state.game_store.create_game_config(&session).await {
+                        Ok(config) => {
+                            Ok((StatusCode::CREATED, Json(NewSessionResponse { config })))
+                        }
                         Err(e) => Err(map_error(e)),
-                    }
-                }
-                "failed" => {
-                    info!(
-                        "Payment {} has failed, creating new invoice",
-                        pending_payment.payment_id
-                    );
-
-                    // Payment failed, update our record
-                    if let Err(e) = state
-                        .payment_store
-                        .update_payment_status(&pending_payment.payment_id, "failed")
-                        .await
-                    {
-                        error!("Failed to update payment status: {}", e);
-                    }
-
-                    // Create a new invoice for the user
-                    let description = format!("Asteroids Game Entry Fee - User:{}", pubkey);
-
-                    // Step 1: Request a new payment from Voltage
-                    let payment_id = match state
-                        .lightning_service
-                        .create_game_invoice(500, Some(&description))
-                        .await
-                    {
-                        Ok(id) => id,
-                        Err(e) => {
-                            error!("Failed to create new invoice after payment failure: {}", e);
-                            return Err((
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                "Failed to create payment invoice",
-                            )
-                                .into_response());
-                        }
-                    };
-
-                    // Step 2: Poll for the invoice
-                    let mut invoice: Option<String> = None;
-                    let max_attempts = 10;
-
-                    for _attempt in 0..max_attempts {
-                        match state
-                            .lightning_service
-                            .get_payment_invoice(&payment_id)
-                            .await
-                        {
-                            Ok(Some(payment_request)) => {
-                                invoice = Some(payment_request);
-                                break;
-                            }
-                            Ok(None) => {
-                                // Invoice not available yet, wait and retry
-                                tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
-                            }
-                            Err(e) => {
-                                error!("Error getting payment invoice: {}", e);
-                                return Err((
-                                    StatusCode::INTERNAL_SERVER_ERROR,
-                                    "Failed to retrieve payment invoice",
-                                )
-                                    .into_response());
-                            }
-                        }
-                    }
-
-                    // Step 3: Process the invoice result
-                    match invoice {
-                        Some(invoice_str) => {
-                            // Store the payment in the database
-                            match state
-                                .payment_store
-                                .create_game_payment(user.id, &payment_id, &invoice_str, 500)
-                                .await
-                            {
-                                Ok(payment) => {
-                                    // Return payment required response
-                                    Err((
-                                        StatusCode::PAYMENT_REQUIRED,
-                                        Json(json!({
-                                            "payment_required": true,
-                                            "invoice": payment.invoice,
-                                            "payment_id": payment.payment_id,
-                                            "amount_sats": payment.amount_sats,
-                                            "created_at": payment.created_at
-                                        })),
-                                    )
-                                        .into_response())
-                                }
-                                Err(e) => Err(map_error(e)),
-                            }
-                        }
-                        None => {
-                            error!("Failed to get invoice after {} attempts", max_attempts);
-                            Err((
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                "Failed to generate Lightning invoice. Please try again.",
-                            )
-                                .into_response())
-                        }
-                    }
-                }
-                _ => {
-                    info!("Payment {} is still pending", pending_payment.payment_id);
-
-                    // Payment still pending
-                    Err((
-                        StatusCode::PAYMENT_REQUIRED,
-                        Json(json!({
-                            "payment_required": true,
-                            "invoice": pending_payment.invoice,
-                            "payment_id": pending_payment.payment_id,
-                            "amount_sats": pending_payment.amount_sats,
-                            "created_at": pending_payment.created_at
-                        })),
-                    )
-                        .into_response())
+                    },
+                    Err(e) => Err(map_error(e)),
                 }
             }
-        }
-        Ok(None) => {
-            // Payment not found in Lightning API yet, consider it still pending
-            Err((
-                StatusCode::PAYMENT_REQUIRED,
-                Json(json!({
-                    "payment_required": true,
-                    "invoice": pending_payment.invoice,
-                    "payment_id": pending_payment.payment_id,
-                    "amount_sats": pending_payment.amount_sats,
-                    "created_at": pending_payment.created_at,
-                    "message": "Payment processing, please wait"
-                })),
-            )
-                .into_response())
-        }
+            "failed" => {
+                info!(
+                    "Payment {} has failed, creating new invoice",
+                    pending_payment.payment_id
+                );
+
+                if let Err(e) = state
+                    .payment_store
+                    .update_payment_status(&pending_payment.payment_id, "failed")
+                    .await
+                {
+                    error!("Failed to update payment status: {}", e);
+                }
+
+                create_and_return_invoice(&state, user.id, &pubkey).await
+            }
+            _ => {
+                info!("Payment {} is still pending", pending_payment.payment_id);
+
+                Err((
+                    StatusCode::PAYMENT_REQUIRED,
+                    Json(json!({
+                        "payment_required": true,
+                        "invoice": pending_payment.invoice,
+                        "payment_id": pending_payment.payment_id,
+                        "amount_sats": pending_payment.amount_sats,
+                        "created_at": pending_payment.created_at
+                    })),
+                )
+                    .into_response())
+            }
+        },
         Err(e) => {
             error!("Failed to check payment status: {}", e);
 
-            // Return the existing invoice in case of error checking status
             Err((
                 StatusCode::PAYMENT_REQUIRED,
                 Json(json!({
@@ -431,6 +231,81 @@ pub async fn start_new_session(
                 .into_response())
         }
     }
+}
+
+/// Helper: create a Lightning invoice and return a 402 Payment Required response.
+async fn create_and_return_invoice(
+    state: &Arc<AppState>,
+    user_id: i64,
+    pubkey: &str,
+) -> Result<(StatusCode, Json<NewSessionResponse>), Response> {
+    let description = format!("Asteroids Game Entry Fee - User:{}", pubkey);
+
+    let invoice_result = state
+        .lightning_provider
+        .create_invoice(500, &description)
+        .await
+        .map_err(|e| {
+            error!("Failed to create invoice: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to create payment invoice",
+            )
+                .into_response()
+        })?;
+
+    // For LND the invoice is returned immediately; for Voltage it needs polling
+    let invoice_str = match invoice_result.invoice {
+        Some(inv) => inv,
+        None => {
+            // Voltage path: poll for the invoice
+            let mut invoice = None;
+            for attempt in 0..10 {
+                info!("Poll attempt {} for invoice", attempt + 1);
+                match state
+                    .lightning_provider
+                    .check_payment_status(&invoice_result.payment_id)
+                    .await
+                {
+                    Ok(status) if status.invoice.is_some() => {
+                        invoice = status.invoice;
+                        break;
+                    }
+                    _ => {
+                        tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
+                    }
+                }
+            }
+            invoice.ok_or_else(|| {
+                error!("Failed to get invoice after polling");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to generate Lightning invoice. Please try again.",
+                )
+                    .into_response()
+            })?
+        }
+    };
+
+    info!("Successfully obtained invoice: {}", invoice_str);
+
+    let payment = state
+        .payment_store
+        .create_game_payment(user_id, &invoice_result.payment_id, &invoice_str, 500)
+        .await
+        .map_err(map_error)?;
+
+    Err((
+        StatusCode::PAYMENT_REQUIRED,
+        Json(json!({
+            "payment_required": true,
+            "invoice": payment.invoice,
+            "payment_id": payment.payment_id,
+            "amount_sats": payment.amount_sats,
+            "created_at": payment.created_at
+        })),
+    )
+        .into_response())
 }
 
 // Submit a score

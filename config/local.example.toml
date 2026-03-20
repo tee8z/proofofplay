@@ -9,7 +9,8 @@ migrations_folder = "./crates/server/migrations"
 [api_settings]
 domain = "127.0.0.1"
 port = "8900"
-private_key_file = "./creds/private.key"
+private_key_file = "./creds/private.pem"
+# Voltage API settings (used when ln_settings.provider = "voltage")
 voltage_api_key = ""
 voltage_api_url = "https://voltageapi.com/v1/"
 voltage_org_id = ""
@@ -22,9 +23,11 @@ ui_dir = "./crates/public_ui"
 
 [ln_settings]
 # Lightning provider: "voltage" or "lnd"
-provider = "voltage"
+provider = "lnd"
 
 # LND settings (used when provider = "lnd")
-# lnd_base_url = "https://localhost:8080"
-# lnd_macaroon_path = "./creds/admin.macaroon"
-# lnd_tls_cert_path = "./creds/tls.cert"
+lnd_base_url = "https://your-lnd-node.example.com"
+# NOTE: use absolute path — shell variables like $HOME are not expanded
+lnd_macaroon_path = "/path/to/admin.macaroon"
+# Optional: only needed for self-signed TLS certs
+# lnd_tls_cert_path = "/path/to/tls.cert"

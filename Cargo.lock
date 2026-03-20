@@ -148,6 +148,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dcfed56ad506cb2c684a14971b8861fdc3baaaae314b9e5f9bb532cbe3ba7a4f"
 
 [[package]]
+name = "argon2"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c3610892ee6e0cbce8ae2700349fcf8f98adb0dbfbee85aec3c9179d29cc072"
+dependencies = [
+ "base64ct",
+ "blake2",
+ "cpufeatures",
+ "password-hash",
+]
+
+[[package]]
 name = "arraydeque"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2006,13 +2018,16 @@ version = "0.1.0"
 dependencies = [
  "aes-gcm",
  "async-trait",
+ "base64 0.22.1",
  "blake2",
+ "chacha20poly1305",
  "getrandom 0.2.15",
  "hex",
  "js-sys",
  "log",
  "nostr-sdk",
  "rand 0.8.5",
+ "scrypt",
  "secrecy",
  "serde",
  "serde-wasm-bindgen",
@@ -2963,6 +2978,7 @@ name = "server"
 version = "0.3.1"
 dependencies = [
  "anyhow",
+ "argon2",
  "async-channel",
  "async-trait",
  "axum",

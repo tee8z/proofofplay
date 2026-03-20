@@ -1,4 +1,4 @@
-const AUTH_REQUIRED_ROUTES = ["/play", "/fragments/score", "/api/v1/game", "/api/v1/prizes"];
+const AUTH_REQUIRED_ROUTES = ["/api/v1/game", "/api/v1/prizes"];
 
 function requiresAuth(url) {
     return AUTH_REQUIRED_ROUTES.some((route) => url.includes(route));

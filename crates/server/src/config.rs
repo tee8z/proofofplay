@@ -82,7 +82,7 @@ impl Default for APISettings {
         APISettings {
             domain: String::from("127.0.0.1"),
             port: String::from("8900"),
-            private_key_file: String::from("./creds/private.key"),
+            private_key_file: String::from("./creds/private.pem"),
             voltage_api_key: String::from(""),
             voltage_api_url: String::from("https://voltageapi.com/v1/"),
             voltage_org_id: String::from(""),
