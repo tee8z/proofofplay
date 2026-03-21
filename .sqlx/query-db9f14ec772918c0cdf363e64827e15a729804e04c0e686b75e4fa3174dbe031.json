@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n            SELECT id, user_id, payment_id, invoice, amount_sats, status, plays_remaining, created_at, updated_at, paid_at\n            FROM game_payments\n            WHERE payment_id = ?\n            ",
+  "query": "\n            SELECT id, user_id, payment_id, invoice, amount_sats, status, plays_remaining, expires_at, created_at, updated_at, paid_at\n            FROM game_payments\n            WHERE payment_id = ?\n            ",
   "describe": {
     "columns": [
       {
@@ -39,18 +39,23 @@
         "type_info": "Integer"
       },
       {
-        "name": "created_at",
+        "name": "expires_at",
         "ordinal": 7,
         "type_info": "Text"
       },
       {
-        "name": "updated_at",
+        "name": "created_at",
         "ordinal": 8,
         "type_info": "Text"
       },
       {
-        "name": "paid_at",
+        "name": "updated_at",
         "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "paid_at",
+        "ordinal": 10,
         "type_info": "Text"
       }
     ],
@@ -65,10 +70,11 @@
       false,
       false,
       false,
+      true,
       false,
       false,
       true
     ]
   },
-  "hash": "8f232fd58cca74250160496e81b879bbd957f27621d2f60521a1a6a905e32bf3"
+  "hash": "db9f14ec772918c0cdf363e64827e15a729804e04c0e686b75e4fa3174dbe031"
 }

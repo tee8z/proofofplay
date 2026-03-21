@@ -7,6 +7,10 @@ pub struct PageConfig<'a> {
     pub title: &'a str,
     pub api_base: &'a str,
     pub default_relays: &'a [String],
+    pub entry_fee_sats: i64,
+    pub plays_per_payment: i32,
+    pub plays_ttl_minutes: i64,
+    pub prize_pool_pct: u8,
 }
 
 pub fn base(config: &PageConfig, content: Markup) -> Markup {
@@ -15,7 +19,11 @@ pub fn base(config: &PageConfig, content: Markup) -> Markup {
         html lang="en" {
             head {
                 meta charset="UTF-8";
-                meta name="viewport" content="width=device-width, initial-scale=1.0";
+                meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover";
+                meta name="theme-color" content="#212529";
+                meta name="apple-mobile-web-app-capable" content="yes";
+                meta name="apple-mobile-web-app-status-bar-style" content="black-translucent";
+                meta name="format-detection" content="telephone=no";
                 title { (config.title) }
 
                 link rel="stylesheet" href="https://unpkg.com/nes.css@latest/css/nes.min.css";
@@ -26,7 +34,7 @@ pub fn base(config: &PageConfig, content: Markup) -> Markup {
                 script type="module" src="https://unpkg.com/bitcoin-qr@1.4.1/dist/bitcoin-qr/bitcoin-qr.esm.js" {}
                 script nomodule src="https://unpkg.com/bitcoin-qr@1.4.1/dist/bitcoin-qr/bitcoin-qr.js" {}
             }
-            body data-api-base=(config.api_base) data-default-relays=(config.default_relays.join(",")) {
+            body data-api-base=(config.api_base) data-default-relays=(config.default_relays.join(",")) data-plays-per-payment=(config.plays_per_payment) {
                 (navbar())
 
                 div class="container" {

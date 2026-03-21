@@ -20,6 +20,18 @@ export default defineConfig({
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
     },
+    {
+      name: "mobile-chrome",
+      use: { ...devices["Pixel 7"] },
+    },
+    {
+      name: "mobile-iphone",
+      use: {
+        // iPhone 14 viewport with Chromium (WebKit deps not always available)
+        ...devices["iPhone 14"],
+        defaultBrowserType: "chromium",
+      },
+    },
   ],
 
   webServer: {

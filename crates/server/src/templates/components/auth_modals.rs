@@ -107,14 +107,8 @@ pub fn auth_modals() -> Markup {
                         button id="copyRecoveryKey" class="nes-btn is-warning" style="margin-top: 10px;" {
                             "Copy to clipboard"
                         }
-                        div class="nes-field" style="margin-top: 15px;" {
-                            label {
-                                input type="checkbox" id="recoveryKeySavedCheckbox" class="nes-checkbox";
-                                span { "I have saved my recovery key" }
-                            }
-                        }
-                        button id="usernameRegisterComplete" class="nes-btn is-success" style="margin-top: 10px;" disabled {
-                            "Continue"
+                        button type="button" id="usernameRegisterComplete" class="nes-btn is-warning" style="margin-top: 15px; width: 100%;" {
+                            "I have saved my recovery key"
                         }
                     }
                 }

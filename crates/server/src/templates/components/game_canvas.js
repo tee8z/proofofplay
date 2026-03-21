@@ -65,6 +65,12 @@ function initializeElements() {
 }
 
 function startGame() {
+    if (!window.gameAuth || !window.gameAuth.isLoggedIn()) {
+        const loginModal = document.getElementById("loginModal");
+        if (loginModal) loginModal.classList.add("is-active");
+        return;
+    }
+
     console.log("Starting game...");
     const startGameBtn = document.getElementById("startGameBtn");
     if (startGameBtn) {
@@ -107,7 +113,8 @@ function startGameWithConfig(sessionData) {
     const startScreen = document.getElementById("start-screen");
     if (startScreen) startScreen.style.display = "none";
     const gameContainer = document.querySelector(".game-container");
-    if (gameContainer) gameContainer.style.display = "block";
+    if (gameContainer) gameContainer.style.removeProperty("display");
+    document.body.classList.add("game-active");
 
     sessionId = sessionData.config.sessionId || sessionData.config.session_id;
 
@@ -350,6 +357,7 @@ function render(state) {
 
 async function handleGameOver(state) {
     playSound(sounds.explosion);
+    document.body.classList.remove("game-active");
 
     if (finalScoreElement) finalScoreElement.textContent = state.score;
 
@@ -458,6 +466,16 @@ function setupTouchControls() {
             btn.classList.remove("active");
         });
     }
+
+    // Prevent page scrolling while game is active
+    const gameSection = document.getElementById("game-section");
+    if (gameSection) {
+        gameSection.addEventListener("touchmove", function (e) {
+            if (document.querySelector(".game-container[style*='block']")) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+    }
 }
 
 // Auth event listeners
@@ -493,12 +511,14 @@ if (document.readyState === "loading") {
 } else {
     initializeElements();
     setupStartGameButton();
+    setupTouchControls();
 }
 
 // Re-initialize after HTMX swaps
 document.body.addEventListener("htmx:afterSwap", function () {
     initializeElements();
     setupStartGameButton();
+    setupTouchControls();
 });
 
 // Update plays remaining display

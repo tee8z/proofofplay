@@ -6,7 +6,7 @@ pub fn leaderboard_rows(scores: &[ScoreWithUsername]) -> Markup {
     html! {
         @if scores.is_empty() {
             tr {
-                td colspan="6" class="has-text-centered" {
+                td colspan="7" class="has-text-centered" {
                     "No scores available yet!"
                 }
             }
@@ -19,6 +19,11 @@ pub fn leaderboard_rows(scores: &[ScoreWithUsername]) -> Markup {
                     td class="has-text-centered" { (score.level) }
                     td class="has-text-centered" { (format_play_time(score.play_time)) }
                     td class="has-text-centered" { (&score.created_at) }
+                    td class="has-text-centered" {
+                        button class="nes-btn is-primary replay-btn"
+                               data-score-id=(score.id)
+                               style="font-size: 0.6em; padding: 2px 6px;" { "Watch" }
+                    }
                 }
             }
         }

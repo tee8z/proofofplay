@@ -79,8 +79,10 @@ lnd_macaroon_path = "/opt/proofofplay/secrets/admin.macaroon"
 start_time = "00:00"
 end_time = "23:59"
 check_interval_secs = 3600
-entry_fee_sats = 500
-prize_pool_pct = 90
+entry_fee_sats = 1000
+plays_per_payment = 5
+plays_ttl_minutes = 60
+prize_pool_pct = 80
 
 [bot_detection]
 enabled = true

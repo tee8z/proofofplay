@@ -1,0 +1,44 @@
+# Proof of Play - E2E Test Configuration
+# Uses stub Lightning provider (all invoices auto-settle)
+
+[db_settings]
+data_folder = "./data/test"
+migrations_folder = "./crates/server/migrations"
+
+[api_settings]
+domain = "0.0.0.0"
+port = "8901"
+private_key_file = "./creds/test.pem"
+voltage_api_key = ""
+voltage_api_url = ""
+voltage_org_id = ""
+voltage_env_id = ""
+voltage_wallet_id = ""
+
+[ui_settings]
+remote_url = "http://192.168.1.12:8901"
+ui_dir = "./ui"
+static_dir = "./crates/server/static"
+
+[ln_settings]
+provider = "lnd"
+lnd_base_url = "https://coordv2.u.voltageapp.io"
+lnd_macaroon_path = "/home/teebz/coordv2/admin.macaroon"
+
+[competition_settings]
+start_time = "00:00"
+end_time = "23:59"
+check_interval_secs = 86400
+entry_fee_sats = 100
+plays_per_payment = 5
+prize_pool_pct = 90
+
+[bot_detection]
+enabled = false
+max_accounts_per_ip_per_hour = 100
+max_sessions_per_ip_per_hour = 100
+min_timing_variance_us2 = 0
+max_mean_offset_us = 1000000
+
+[admin]
+allowed_subnets = ["127.0.0.1/32", "::1/128"]

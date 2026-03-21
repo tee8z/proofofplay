@@ -278,6 +278,31 @@ class ReplayViewer {
         return inputs;
     }
 
+    // Load and play a single replay by score ID (for leaderboard watch buttons)
+    async loadSingleReplay(scoreId) {
+        if (!this.canvas) return;
+        try {
+            const apiBase = window.API_BASE || document.body.getAttribute("data-api-base") || "";
+            const response = await fetch(`${apiBase}/api/v1/game/replay/${scoreId}`);
+            if (!response.ok) {
+                console.error("Failed to fetch replay:", response.status);
+                return;
+            }
+            const replay = await response.json();
+            this.replays = [replay];
+            this.canvas.style.display = "block";
+            const label = document.getElementById("replayLabel");
+            if (label) {
+                label.style.display = "block";
+                label.textContent = `Replay: ${replay.username} — Score: ${replay.score} (Level ${replay.level})`;
+            }
+            this.startReplay(0);
+            this.canvas.scrollIntoView({ behavior: "smooth", block: "center" });
+        } catch (e) {
+            console.error("Failed to load single replay:", e);
+        }
+    }
+
     stop() {
         if (this.animationId) {
             cancelAnimationFrame(this.animationId);
@@ -297,8 +322,30 @@ function initReplayViewer() {
             window.replayViewer.stop();
         }
         window.replayViewer = new ReplayViewer("replayCanvas");
-        window.replayViewer.loadReplays();
+        // Only auto-load top replays on home page (not on leaderboard)
+        const isLeaderboard = !!document.querySelector(".leaderboard-container");
+        if (!isLeaderboard) {
+            window.replayViewer.loadReplays();
+        }
+        initReplayButtons();
     }
+}
+
+// Set up click handlers for leaderboard replay buttons
+function initReplayButtons() {
+    document.querySelectorAll(".replay-btn").forEach(function(btn) {
+        btn.addEventListener("click", function(e) {
+            e.preventDefault();
+            const scoreId = this.getAttribute("data-score-id");
+            if (!scoreId) return;
+            const canvas = document.getElementById("replayCanvas");
+            if (!canvas) return;
+            if (!window.replayViewer || !window.GameEngine) {
+                window.replayViewer = new ReplayViewer("replayCanvas");
+            }
+            window.replayViewer.loadSingleReplay(scoreId);
+        });
+    });
 }
 
 // Initialize after WASM is loaded
@@ -311,7 +358,10 @@ if (document.readyState === "loading") {
 
 // Re-initialize after HTMX page swap
 document.body.addEventListener("htmx:afterSwap", function() {
-    setTimeout(initReplayViewer, 500);
+    setTimeout(function() {
+        initReplayViewer();
+        initReplayButtons();
+    }, 500);
 });
 
 // Stop replay when navigating away from home page

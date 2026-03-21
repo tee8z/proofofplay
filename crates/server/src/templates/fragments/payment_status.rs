@@ -1,12 +1,12 @@
 use maud::{html, Markup};
 
 #[allow(dead_code)]
-pub fn payment_pending(invoice: &str) -> Markup {
+pub fn payment_pending(invoice: &str, amount_sats: i64) -> Markup {
     html! {
         div class="payment-status-fragment" {
             div class="spinner" {}
             p { "Waiting for payment..." }
-            p class="nes-text is-primary" { "Amount: 500 sats" }
+            p class="nes-text is-primary" { "Amount: " (amount_sats) " sats" }
             div class="qr-container" id="qrContainer" {
                 // QR code rendered client-side
             }

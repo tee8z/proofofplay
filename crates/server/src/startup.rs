@@ -36,7 +36,8 @@ use nostr_sdk::Keys;
 use crate::{
     check_payment_status, check_prize_eligibility, claim_prize, config::Settings,
     file_utils::create_folder, game_handler, get_competition_info, get_game_config,
-    get_ledger_events, get_ledger_summary, get_server_pubkey, get_top_replays, get_top_scores,
+    get_ledger_events, get_ledger_summary, get_replay_by_score, get_server_pubkey,
+    get_top_replays, get_top_scores,
     get_user_scores, health_check, home_handler, index_handler, leaderboard_handler,
     leaderboard_rows_handler, login, login_username, nav_fragment_handler, register,
     register_username, routes::admin::admin_dashboard, run_daily_tasks, secrets::get_key,
@@ -241,7 +242,8 @@ pub fn app(app_state: AppState, serve_dir: ServeDir) -> Router {
         .route("/scores/top", get(get_top_scores))
         .route("/scores/user", get(get_user_scores))
         .route("/competition", get(get_competition_info))
-        .route("/replays/top", get(get_top_replays));
+        .route("/replays/top", get(get_top_replays))
+        .route("/replay/{score_id}", get(get_replay_by_score));
 
     let payment_endpoints = Router::new().route("/status/{payment_id}", get(check_payment_status));
 

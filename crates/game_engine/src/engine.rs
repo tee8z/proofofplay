@@ -401,8 +401,12 @@ impl GameState {
                         * self.level;
                     self.score += points;
 
-                    // Split into smaller asteroids if not already small
+                    // Split into smaller asteroids if not already small.
+                    // Medium asteroids only split into Small at level >= min_split_level.
                     if let Some(smaller_size) = asteroid.size_class.smaller() {
+                    if asteroid.size_class != AsteroidSize::Medium
+                        || self.level >= self.config.asteroids.min_split_level
+                    {
                         let smaller_radius =
                             self.config.asteroids.size * smaller_size.radius_factor();
                         for _ in 0..2 {
@@ -439,6 +443,7 @@ impl GameState {
                                 size_class: smaller_size,
                             });
                         }
+                    }
                     }
 
                     asteroids_to_remove.push(i);

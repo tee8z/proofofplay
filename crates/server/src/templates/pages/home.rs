@@ -4,16 +4,35 @@ use crate::domain::ScoreWithUsername;
 use crate::templates::layouts::base::{base, PageConfig};
 
 pub fn home_page(config: &PageConfig, scores: &[ScoreWithUsername]) -> Markup {
-    base(config, home_content(scores))
+    base(config, home_content(config.entry_fee_sats, config.plays_per_payment, config.plays_ttl_minutes, config.prize_pool_pct, scores))
 }
 
-pub fn home_content(scores: &[ScoreWithUsername]) -> Markup {
+pub fn home_content(entry_fee_sats: i64, plays_per_payment: i32, plays_ttl_minutes: i64, prize_pool_pct: u8, scores: &[ScoreWithUsername]) -> Markup {
     html! {
         div id="welcome-screen" class="nes-container is-dark" {
             h1 class="nes-text is-primary" { "Proof of Play" }
             p class="nes-text" { "Welcome to Proof of Play!" }
             p class="nes-text is-success" style="font-size: 0.7em; margin-top: 8px;" {
-                "500 sats = 5 plays. No per-game fees!"
+                (entry_fee_sats) " sats = " (plays_per_payment) " plays"
+                @if plays_ttl_minutes > 0 {
+                    " (" (plays_ttl_minutes) " min window)"
+                }
+            }
+            p class="nes-text is-warning" style="font-size: 0.7em; margin-top: 4px;" {
+                (prize_pool_pct) "% of each entry goes to the prize pool!"
+            }
+
+            div style="margin-top: 12px; font-size: 0.65em;" {
+                p class="nes-text" { "HOW IT WORKS" }
+                p { "1. Pay entry fee for " (plays_per_payment) " plays" }
+                p { "2. Compete for the daily high score" }
+                p { "3. Top scorer wins the prize pool!" }
+                p style="margin-top: 8px;" {
+                    a href="https://github.com/tee8z/proofofplay" target="_blank" class="nes-text is-primary" style="font-size: 0.9em;" {
+                        "GitHub"
+                    }
+                    " — source code, docs & bug reports"
+                }
             }
 
             // Replay viewer

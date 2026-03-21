@@ -551,6 +551,52 @@ impl GameStore {
         Ok(replays)
     }
 
+    /// Get replay data for a specific score by its score_id.
+    pub async fn get_replay_by_score_id(
+        &self,
+        score_id: i64,
+    ) -> Result<Option<ReplayData>, Error> {
+        let row = sqlx::query(
+            r#"
+            SELECT
+                sm.username,
+                sm.score,
+                sm.level,
+                sm.frames,
+                gs.seed,
+                gs.engine_config,
+                gil.input_log
+            FROM score_metadata sm
+            JOIN game_sessions gs ON gs.session_id = sm.session_id
+            JOIN game_input_logs gil ON gil.session_id = sm.session_id
+            WHERE sm.score_id = ?
+              AND sm.rejected = 0
+              AND gs.seed IS NOT NULL
+              AND gs.engine_config IS NOT NULL
+            "#,
+        )
+        .bind(score_id)
+        .fetch_optional(&self.db)
+        .await?;
+
+        match row {
+            Some(row) => {
+                use sqlx::Row;
+                let input_log: Vec<u8> = row.try_get("input_log")?;
+                Ok(Some(ReplayData {
+                    username: row.try_get("username")?,
+                    score: row.try_get("score")?,
+                    level: row.try_get("level")?,
+                    frames: row.try_get("frames")?,
+                    seed: row.try_get("seed")?,
+                    engine_config: row.try_get("engine_config")?,
+                    input_log_base64: base64_encode(&input_log),
+                }))
+            }
+            None => Ok(None),
+        }
+    }
+
     pub async fn save_input_log(
         &self,
         session_id: &str,

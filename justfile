@@ -93,6 +93,11 @@ test-e2e-ui: build-wasm
 test-e2e-headed: build-wasm
     npx playwright test --headed
 
+# Take mobile screenshots (Pixel 7 + iPhone 14 viewports)
+test-mobile-screenshots: build-wasm
+    npx playwright test --project=mobile-chrome --project=mobile-iphone --grep "Mobile screenshots"
+    @echo "Screenshots saved to ./screenshots/"
+
 # Install e2e test dependencies
 setup-e2e:
     npm install
@@ -113,6 +118,21 @@ run-debug *ARGS:
 # Run with trace logging
 run-trace *ARGS:
     RUST_LOG=trace cargo run --bin server -- {{ARGS}}
+
+# Run with stub Lightning + cloudflare tunnel for phone testing
+# Opens a public HTTPS URL you can hit from your phone
+run-tunnel: build-wasm
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Starting server on port 8901 with stub Lightning..."
+    cargo run --bin server -- --config config/test.toml &
+    SERVER_PID=$!
+    trap "kill $SERVER_PID 2>/dev/null" EXIT
+    sleep 2
+    echo ""
+    echo "Starting cloudflare tunnel — scan the URL with your phone:"
+    echo ""
+    nix shell nixpkgs#cloudflared --command cloudflared tunnel --url http://127.0.0.1:8901
 
 # ============================================
 # Setup

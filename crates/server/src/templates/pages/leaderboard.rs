@@ -23,6 +23,11 @@ pub fn leaderboard_content(scores: &[ScoreWithUsername]) -> Markup {
                 }
             }
 
+            div class="replay-container" style="margin-bottom: 15px;" {
+                p id="replayLabel" class="nes-text is-primary" style="display: none; font-size: 0.7em; margin-bottom: 8px;" {}
+                canvas id="replayCanvas" width="800" height="600" style="display: none; width: 100%; max-width: 800px; border: 2px solid #333;" {}
+            }
+
             table class="leaderboard-table" {
                 thead {
                     tr {
@@ -32,6 +37,7 @@ pub fn leaderboard_content(scores: &[ScoreWithUsername]) -> Markup {
                         th class="has-text-centered" { "Level" }
                         th class="has-text-centered" { "Time" }
                         th class="has-text-centered" { "Date" }
+                        th class="has-text-centered" { "" }
                     }
                 }
                 tbody hx-get="/fragments/leaderboard-rows"

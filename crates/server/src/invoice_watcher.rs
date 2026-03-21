@@ -130,11 +130,11 @@ async fn handle_invoice_event(json_line: &str, state: &Arc<AppState>) -> Result<
         error!("Invoice watcher: failed to update payment status: {}", e);
     }
 
-    // Grant plays
-    let plays_per_payment = state.settings.competition_settings.plays_per_payment;
+    // Grant plays with TTL
+    let comp = &state.settings.competition_settings;
     if let Err(e) = state
         .payment_store
-        .set_plays_remaining(&r_hash_hex, plays_per_payment)
+        .set_plays_remaining(&r_hash_hex, comp.plays_per_payment, comp.plays_ttl_minutes)
         .await
     {
         error!("Invoice watcher: failed to set plays_remaining: {}", e);
@@ -162,7 +162,7 @@ async fn handle_invoice_event(json_line: &str, state: &Arc<AppState>) -> Result<
 
     info!(
         "Invoice watcher: payment {} processed, {} plays granted",
-        r_hash_hex, plays_per_payment
+        r_hash_hex, comp.plays_per_payment
     );
 
     Ok(())

@@ -10,6 +10,10 @@ pub async fn index_handler(State(state): State<Arc<AppState>>) -> Html<String> {
         title: "Not Found - Proof of Play",
         api_base: &state.remote_url,
         default_relays: &state.settings.ui_settings.default_relays,
+        entry_fee_sats: state.settings.competition_settings.entry_fee_sats,
+        plays_per_payment: state.settings.competition_settings.plays_per_payment,
+        plays_ttl_minutes: state.settings.competition_settings.plays_ttl_minutes,
+        prize_pool_pct: state.settings.competition_settings.prize_pool_pct,
     };
     let content = maud::html! {
         div class="nes-container is-dark" style="text-align: center; margin-top: 40px;" {

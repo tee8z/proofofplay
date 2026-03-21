@@ -67,6 +67,14 @@ pub struct AsteroidConfig {
     pub size: Fixed,
     pub vertices_min: u32,
     pub vertices_max: u32,
+    /// Minimum level at which Medium asteroids split into Small.
+    /// Below this level, Medium asteroids are destroyed without spawning fragments.
+    #[serde(default = "default_min_split_level")]
+    pub min_split_level: u32,
+}
+
+fn default_min_split_level() -> u32 {
+    3
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -125,6 +133,7 @@ impl GameConfig {
                 size: Fixed::from(30),
                 vertices_min: 7,
                 vertices_max: 15,
+                min_split_level: 3,
             },
             scoring: ScoringConfig {
                 points_per_asteroid: 10,

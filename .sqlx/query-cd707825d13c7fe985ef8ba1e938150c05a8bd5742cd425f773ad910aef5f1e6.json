@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n            SELECT id, user_id, payment_id, invoice, amount_sats, status, plays_remaining, created_at, updated_at, paid_at\n            FROM game_payments\n            WHERE user_id = ? AND status = 'pending'\n            ORDER BY created_at DESC\n            LIMIT 1\n            ",
+  "query": "\n            SELECT id, user_id, payment_id, invoice, amount_sats, status, plays_remaining, expires_at, created_at, updated_at, paid_at\n            FROM game_payments\n            WHERE user_id = ? AND status = 'pending'\n            ORDER BY created_at DESC\n            LIMIT 1\n            ",
   "describe": {
     "columns": [
       {
@@ -39,18 +39,23 @@
         "type_info": "Integer"
       },
       {
-        "name": "created_at",
+        "name": "expires_at",
         "ordinal": 7,
         "type_info": "Text"
       },
       {
-        "name": "updated_at",
+        "name": "created_at",
         "ordinal": 8,
         "type_info": "Text"
       },
       {
-        "name": "paid_at",
+        "name": "updated_at",
         "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "paid_at",
+        "ordinal": 10,
         "type_info": "Text"
       }
     ],
@@ -65,10 +70,11 @@
       false,
       false,
       false,
+      true,
       false,
       false,
       true
     ]
   },
-  "hash": "ca3359e759dcf56ed813634f970597e2984b8d6eb418eb39a7dec11e636db489"
+  "hash": "cd707825d13c7fe985ef8ba1e938150c05a8bd5742cd425f773ad910aef5f1e6"
 }

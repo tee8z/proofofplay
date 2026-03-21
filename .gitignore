@@ -10,4 +10,5 @@ wg-keys/
 node_modules/
 playwright-report/
 test-results/
+screenshots/
 /data/test/

@@ -65,13 +65,6 @@ class AuthClient {
         const copyRecoveryKey = document.getElementById("copyRecoveryKey");
         if (copyRecoveryKey) copyRecoveryKey.addEventListener("click", () => this.handleCopyRecoveryKey());
 
-        const recoveryKeySavedCheckbox = document.getElementById("recoveryKeySavedCheckbox");
-        if (recoveryKeySavedCheckbox) {
-            recoveryKeySavedCheckbox.addEventListener("change", (e) => {
-                const completeBtn = document.getElementById("usernameRegisterComplete");
-                if (completeBtn) completeBtn.disabled = !e.target.checked;
-            });
-        }
 
         const usernameRegisterComplete = document.getElementById("usernameRegisterComplete");
         if (usernameRegisterComplete) {
@@ -148,10 +141,7 @@ class AuthClient {
         if (step1) step1.classList.remove("is-hidden");
         const step2 = document.getElementById("usernameRegisterStep2");
         if (step2) step2.classList.add("is-hidden");
-        const checkbox = document.getElementById("recoveryKeySavedCheckbox");
-        if (checkbox) checkbox.checked = false;
-        const completeBtn = document.getElementById("usernameRegisterComplete");
-        if (completeBtn) completeBtn.disabled = true;
+
         const modal = document.getElementById("registerModal");
         if (modal) modal.classList.add("is-active");
     }
@@ -187,7 +177,8 @@ class AuthClient {
     async handleCopyRecoveryKey() {
         const recoveryKeyDisplay = document.getElementById("recoveryKeyDisplay");
         if (!recoveryKeyDisplay) return;
-        await navigator.clipboard.writeText(recoveryKeyDisplay.value);
+
+        this.copyToClipboard(recoveryKeyDisplay.value);
 
         const copyBtn = document.getElementById("copyRecoveryKey");
         if (copyBtn) {
@@ -195,6 +186,29 @@ class AuthClient {
             copyBtn.textContent = "Copied!";
             setTimeout(() => { copyBtn.textContent = originalText; }, 2000);
         }
+    }
+
+    copyToClipboard(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).catch(() => this.fallbackCopy(text));
+        } else {
+            this.fallbackCopy(text);
+        }
+    }
+
+    fallbackCopy(text) {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        ta.style.top = "0";
+        ta.setAttribute("readonly", "");
+        document.body.appendChild(ta);
+        ta.removeAttribute("readonly");
+        ta.select();
+        ta.setSelectionRange(0, 99999);
+        document.execCommand("copy");
+        document.body.removeChild(ta);
     }
 
     async handleCopyPrivateKey() {
@@ -488,6 +502,16 @@ class AuthClient {
                 },
             })
         );
+
+        // After login/register, go straight to the game if on the home page
+        // Use HTMX swap to preserve JS auth state (full reload loses username sessions)
+        if (window.location.pathname === "/") {
+            const mainContent = document.getElementById("main-content");
+            if (mainContent && window.htmx) {
+                htmx.ajax("GET", "/play", { target: "#main-content", swap: "innerHTML" });
+                history.pushState({}, "", "/play");
+            }
+        }
 
         return data;
     }

@@ -21,10 +21,14 @@ pub async fn home_handler(headers: HeaderMap, State(state): State<Arc<AppState>>
         title: "Proof of Play",
         api_base: &state.remote_url,
         default_relays: &state.settings.ui_settings.default_relays,
+        entry_fee_sats: state.settings.competition_settings.entry_fee_sats,
+        plays_per_payment: state.settings.competition_settings.plays_per_payment,
+        plays_ttl_minutes: state.settings.competition_settings.plays_ttl_minutes,
+        prize_pool_pct: state.settings.competition_settings.prize_pool_pct,
     };
 
     if headers.contains_key("hx-request") {
-        Html(pages::home::home_content(&scores).into_string())
+        Html(pages::home::home_content(config.entry_fee_sats, config.plays_per_payment, config.plays_ttl_minutes, config.prize_pool_pct, &scores).into_string())
     } else {
         Html(pages::home::home_page(&config, &scores).into_string())
     }
@@ -36,10 +40,14 @@ pub async fn game_handler(headers: HeaderMap, State(state): State<Arc<AppState>>
         title: "Play",
         api_base: &state.remote_url,
         default_relays: &state.settings.ui_settings.default_relays,
+        entry_fee_sats: state.settings.competition_settings.entry_fee_sats,
+        plays_per_payment: state.settings.competition_settings.plays_per_payment,
+        plays_ttl_minutes: state.settings.competition_settings.plays_ttl_minutes,
+        prize_pool_pct: state.settings.competition_settings.prize_pool_pct,
     };
 
     if headers.contains_key("hx-request") {
-        Html(pages::game::game_content().into_string())
+        Html(pages::game::game_content(config.entry_fee_sats, config.plays_per_payment, config.plays_ttl_minutes, config.prize_pool_pct).into_string())
     } else {
         Html(pages::game::game_page(&config).into_string())
     }
@@ -62,6 +70,10 @@ pub async fn leaderboard_handler(
         title: "Leaderboard",
         api_base: &state.remote_url,
         default_relays: &state.settings.ui_settings.default_relays,
+        entry_fee_sats: state.settings.competition_settings.entry_fee_sats,
+        plays_per_payment: state.settings.competition_settings.plays_per_payment,
+        plays_ttl_minutes: state.settings.competition_settings.plays_ttl_minutes,
+        prize_pool_pct: state.settings.competition_settings.prize_pool_pct,
     };
 
     if headers.contains_key("hx-request") {

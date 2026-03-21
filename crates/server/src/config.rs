@@ -155,6 +155,9 @@ pub struct CompetitionSettings {
     /// Number of game sessions granted per payment
     #[serde(default = "default_plays_per_payment")]
     pub plays_per_payment: i32,
+    /// How long granted plays remain valid (in minutes). 0 = never expire.
+    #[serde(default = "default_plays_ttl_minutes")]
+    pub plays_ttl_minutes: i64,
     /// Prize pool percentage (0-100) — remainder goes to server
     pub prize_pool_pct: u8,
 }
@@ -181,15 +184,20 @@ fn default_plays_per_payment() -> i32 {
     5
 }
 
+fn default_plays_ttl_minutes() -> i64 {
+    60
+}
+
 impl Default for CompetitionSettings {
     fn default() -> Self {
         CompetitionSettings {
             start_time: "00:00".to_string(),
             end_time: "23:59".to_string(),
             check_interval_secs: 3600,
-            entry_fee_sats: 500,
+            entry_fee_sats: 1000,
             plays_per_payment: 5,
-            prize_pool_pct: 90,
+            plays_ttl_minutes: 60,
+            prize_pool_pct: 80,
         }
     }
 }

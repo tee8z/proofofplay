@@ -75,10 +75,14 @@ pub async fn check_payment_status(
                 // Grant plays if not already granted (idempotent — invoice
                 // watcher may have already done this)
                 if payment.plays_remaining == 0 {
-                    let plays_per_payment = state.settings.competition_settings.plays_per_payment;
+                    let comp = &state.settings.competition_settings;
                     if let Err(e) = state
                         .payment_store
-                        .set_plays_remaining(&payment_id, plays_per_payment)
+                        .set_plays_remaining(
+                            &payment_id,
+                            comp.plays_per_payment,
+                            comp.plays_ttl_minutes,
+                        )
                         .await
                     {
                         error!("Failed to set plays_remaining: {}", e);

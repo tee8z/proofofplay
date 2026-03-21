@@ -6,10 +6,10 @@ Players pay a small entry fee in sats, compete on daily leaderboards, and the to
 
 ## How It Works
 
-1. **Pay** — Lightning invoice for entry (configurable, default 500 sats)
+1. **Pay** — Lightning invoice for entry (configurable, default 1000 sats = 5 plays)
 2. **Play** — Asteroids-style game runs in the browser via deterministic WASM engine
 3. **Prove** — Every score is replay-verified server-side before being accepted
-4. **Win** — Daily top scorer claims 90% of the prize pool
+4. **Win** — Daily top scorer claims the prize pool (configurable, default 80% of entry fees)
 
 ## Architecture
 
@@ -33,7 +33,7 @@ Browser (WASM)                    Server (Axum)
 ## Gameplay
 
 - **Lives**: 3 starting, max 5. Earn extra lives from boss kills.
-- **Asteroids**: Split when shot (large → medium → small). Points scale by size.
+- **Asteroids**: Split when shot (large → medium → small). Medium only splits into small at higher levels (configurable `min_split_level`, default 3). Points scale by size.
 - **Enemies**: Drones (level 3+), Fighters (level 5+, homing), Bombers (level 7+, tanky)
 - **Bosses**: Every 5 levels. High HP, scaling difficulty each cycle.
 - **Power-ups**: Rapid Fire, Shield, Spread Shot, Speed Boost (drop from enemies)
@@ -92,7 +92,8 @@ POST /api/v1/game/score               Submit verified score
 GET  /api/v1/game/scores/top          Top 10 scores
 GET  /api/v1/game/scores/user         User's best scores
 GET  /api/v1/game/competition         Competition window + entry fee
-GET  /api/v1/game/replays/top         Top replay data
+GET  /api/v1/game/replays/top         Top replay data (today)
+GET  /api/v1/game/replay/{score_id}  Replay data for a specific score
 
 GET  /api/v1/payments/status/{id}     Payment status
 

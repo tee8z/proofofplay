@@ -14,6 +14,7 @@ pub struct GamePayment {
     pub amount_sats: i64,
     pub status: String,
     pub plays_remaining: i64,
+    pub expires_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     pub paid_at: Option<String>,
@@ -95,6 +96,7 @@ impl PaymentStore {
             amount_sats,
             status: "pending".to_string(),
             plays_remaining: 0,
+            expires_at: None,
             created_at: now.clone(),
             updated_at: now,
             paid_at: None,
@@ -106,7 +108,7 @@ impl PaymentStore {
         let payment = sqlx::query_as!(
             GamePayment,
             r#"
-            SELECT id, user_id, payment_id, invoice, amount_sats, status, plays_remaining, created_at, updated_at, paid_at
+            SELECT id, user_id, payment_id, invoice, amount_sats, status, plays_remaining, expires_at, created_at, updated_at, paid_at
             FROM game_payments
             WHERE payment_id = ?
             "#,
@@ -160,7 +162,7 @@ impl PaymentStore {
         let payment = sqlx::query_as!(
             GamePayment,
             r#"
-            SELECT id, user_id, payment_id, invoice, amount_sats, status, plays_remaining, created_at, updated_at, paid_at
+            SELECT id, user_id, payment_id, invoice, amount_sats, status, plays_remaining, expires_at, created_at, updated_at, paid_at
             FROM game_payments
             WHERE user_id = ? AND status = 'pending'
             ORDER BY created_at DESC
@@ -182,6 +184,7 @@ impl PaymentStore {
             SELECT COALESCE(SUM(plays_remaining), 0) as total
             FROM game_payments
             WHERE user_id = ? AND status = 'paid' AND plays_remaining > 0
+              AND (expires_at IS NULL OR expires_at > datetime('now'))
             "#,
             user_id,
         )
@@ -204,6 +207,7 @@ impl PaymentStore {
             WHERE id = (
                 SELECT id FROM game_payments
                 WHERE user_id = ? AND status = 'paid' AND plays_remaining > 0
+                  AND (expires_at IS NULL OR expires_at > datetime('now'))
                 ORDER BY paid_at ASC
                 LIMIT 1
             )
@@ -217,16 +221,54 @@ impl PaymentStore {
         self.get_remaining_plays(user_id).await
     }
 
-    /// Set plays_remaining when a payment is confirmed.
-    pub async fn set_plays_remaining(&self, payment_id: &str, plays: i32) -> Result<(), Error> {
+    /// Set plays_remaining and expiry when a payment is confirmed.
+    /// If `ttl_minutes` is 0, plays never expire.
+    pub async fn set_plays_remaining(
+        &self,
+        payment_id: &str,
+        plays: i32,
+        ttl_minutes: i64,
+    ) -> Result<(), Error> {
+        let now = OffsetDateTime::now_utc();
+        let now_str = now.to_string();
+        let expires_at = if ttl_minutes > 0 {
+            Some((now + time::Duration::minutes(ttl_minutes)).to_string())
+        } else {
+            None
+        };
+        sqlx::query!(
+            r#"
+            UPDATE game_payments
+            SET plays_remaining = ?, expires_at = ?, updated_at = ?
+            WHERE payment_id = ?
+            "#,
+            plays,
+            expires_at,
+            now_str,
+            payment_id,
+        )
+        .execute(&self.db)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Set plays_remaining and expires_at when a payment is confirmed.
+    pub async fn set_plays_with_expiry(
+        &self,
+        payment_id: &str,
+        plays: i32,
+        expires_at: &str,
+    ) -> Result<(), Error> {
         let now = OffsetDateTime::now_utc().to_string();
         sqlx::query!(
             r#"
             UPDATE game_payments
-            SET plays_remaining = ?, updated_at = ?
+            SET plays_remaining = ?, expires_at = ?, updated_at = ?
             WHERE payment_id = ?
             "#,
             plays,
+            expires_at,
             now,
             payment_id,
         )

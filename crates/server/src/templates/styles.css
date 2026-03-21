@@ -5,6 +5,8 @@ body {
     background-color: #212529;
     color: #fff;
     font-family: "Press Start 2P", cursive;
+    font-size: 12px;
+    -webkit-text-size-adjust: 100%;
 }
 
 .container {
@@ -43,13 +45,18 @@ body {
 
 .game-container {
     position: relative;
+    width: 100%;
+    max-width: 800px;
 }
 
 .game-ui {
-    width: 800px;
+    width: 100%;
+    max-width: 800px;
     margin-bottom: 10px;
     display: flex;
     justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 4px;
 }
 
 /* Make the canvas have a pixelated rendering */
@@ -57,6 +64,10 @@ canvas {
     image-rendering: pixelated;
     image-rendering: crisp-edges;
     border: 4px solid white;
+    width: 100%;
+    max-width: 800px;
+    height: auto;
+    aspect-ratio: 800 / 600;
 }
 
 .controls {
@@ -83,6 +94,7 @@ canvas {
     width: 100%;
     height: 100%;
     background-color: rgba(0, 0, 0, 0.7);
+    overflow-y: auto;
 }
 
 .modal.is-active {
@@ -94,10 +106,12 @@ canvas {
 .modal-content {
     background-color: #212529;
     border: 4px solid white;
-    width: 80%;
+    width: 90%;
     max-width: 500px;
     padding: 20px;
     position: relative;
+    max-height: 90vh;
+    overflow-y: auto;
 }
 
 .modal-close {
@@ -107,11 +121,18 @@ canvas {
     cursor: pointer;
     font-size: 1.5em;
     color: #fff;
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .tabs {
     display: flex;
     margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 4px;
 }
 
 .tabs .tab {
@@ -144,11 +165,28 @@ canvas {
     display: none !important;
 }
 
+/* Form inputs — prevent iOS zoom on focus */
+.nes-input,
+input[type="text"],
+input[type="password"] {
+    font-size: 16px !important;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+/* Recovery key — long text that needs wrapping */
+#recoveryKeyDisplay {
+    word-break: break-all;
+    font-size: 12px !important;
+}
+
 /* Leaderboard styling */
 .leaderboard-container {
     width: 100%;
     max-width: 800px;
     margin: 0 auto 20px auto;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .leaderboard-table {
@@ -162,7 +200,8 @@ canvas {
 .leaderboard-table td {
     padding: 8px;
     border: 2px solid #666;
-    font-size: 0.7em;
+    font-size: 0.8em;
+    white-space: nowrap;
 }
 
 .leaderboard-table th {
@@ -178,8 +217,9 @@ canvas {
 
 /* Welcome screen */
 #welcome-screen {
-    width: 800px;
-    min-height: 600px;
+    width: 100%;
+    max-width: 800px;
+    min-height: 400px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -188,6 +228,7 @@ canvas {
     border: 4px solid white;
     padding: 20px;
     margin-bottom: 20px;
+    box-sizing: border-box;
 }
 
 .start-content {
@@ -199,12 +240,18 @@ canvas {
 
 .auth-buttons-container {
     margin: 20px 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
 }
 
 .start-leaderboard {
     width: 100%;
     max-height: 250px;
     overflow-y: auto;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 /* Start screen overlay */
@@ -213,10 +260,12 @@ canvas {
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    width: 800px;
+    width: 100%;
+    max-width: 800px;
     min-height: 300px;
     padding: 20px;
     z-index: 5;
+    box-sizing: border-box;
 }
 
 /* Payment modal */
@@ -237,8 +286,9 @@ canvas {
     margin: 5% auto;
     padding: 20px;
     border: 4px solid white;
-    width: 80%;
+    width: 90%;
     max-width: 500px;
+    box-sizing: border-box;
 }
 
 .qr-container {
@@ -247,10 +297,23 @@ canvas {
     margin: 20px 0;
 }
 
+/* Make QR code responsive */
+.qr-container bitcoin-qr {
+    max-width: 100%;
+}
+
 .payment-status {
     margin-top: 20px;
     padding: 10px;
     text-align: center;
+}
+
+.payment-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 15px;
 }
 
 .copy-feedback {
@@ -274,6 +337,9 @@ canvas {
     padding: 20px;
     z-index: 10;
     text-align: center;
+    width: 90%;
+    max-width: 400px;
+    box-sizing: border-box;
 }
 
 .game-over-overlay .dialog-content {
@@ -306,23 +372,26 @@ canvas {
 /* Touch controls — below canvas, hidden by default, shown on touch devices */
 .touch-controls {
     display: none;
-    padding: 12px 8px;
+    padding: 8px 4px;
     justify-content: space-between;
     align-items: center;
+    width: 100%;
+    max-width: 800px;
+    box-sizing: border-box;
 }
 
 .touch-controls .touch-btn {
     -webkit-user-select: none;
     user-select: none;
     touch-action: manipulation;
-    border: 3px solid rgba(255, 255, 255, 0.5);
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.7);
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.6);
     font-family: "Press Start 2P", cursive;
-    font-size: 18px;
-    width: 72px;
-    height: 72px;
-    border-radius: 14px;
+    font-size: 14px;
+    width: 52px;
+    height: 52px;
+    border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -340,21 +409,21 @@ canvas {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
 }
 
 .touch-dpad-row {
     display: flex;
-    gap: 8px;
+    gap: 6px;
 }
 
 .touch-fire {
-    width: 96px !important;
-    height: 96px !important;
+    width: 66px !important;
+    height: 66px !important;
     border-radius: 50% !important;
-    font-size: 13px !important;
-    border-color: rgba(255, 80, 80, 0.6) !important;
-    color: rgba(255, 80, 80, 0.8) !important;
+    font-size: 11px !important;
+    border-color: rgba(255, 80, 80, 0.5) !important;
+    color: rgba(255, 80, 80, 0.7) !important;
 }
 
 .touch-fire:active,
@@ -362,21 +431,6 @@ canvas {
     background: rgba(255, 80, 80, 0.3) !important;
     border-color: rgba(255, 80, 80, 0.9) !important;
     color: #ff5050 !important;
-}
-
-/* Responsive */
-@media (max-width: 840px) {
-    #welcome-screen,
-    .game-ui,
-    #start-screen {
-        width: 100%;
-        max-width: 100%;
-    }
-
-    canvas {
-        max-width: 100%;
-        height: auto;
-    }
 }
 
 /* Show touch controls and hide keyboard hint on touch devices */
@@ -387,6 +441,259 @@ canvas {
 
     #keyboardControls {
         display: none;
+    }
+
+    /* Full-viewport game layout during gameplay */
+    body.game-active {
+        overflow: hidden;
+        height: 100vh;
+        height: 100dvh;
+    }
+
+    body.game-active .nav-bar {
+        display: none;
+    }
+
+    body.game-active .container {
+        padding: 0;
+        height: 100vh;
+        height: 100dvh;
+        display: flex;
+        flex-direction: column;
+    }
+
+    body.game-active #main-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+
+    body.game-active #game-section {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+
+    /* Show and strip NES.css container styling during gameplay */
+    body.game-active .game-container {
+        display: flex !important;
+    }
+
+    body.game-active .game-container.nes-container {
+        border: none !important;
+        border-image: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    body.game-active .game-ui.nes-container {
+        border: none !important;
+        border-image: none !important;
+        padding: 2px 4px !important;
+        margin: 0 !important;
+    }
+
+    body.game-active .game-container {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        max-width: 100%;
+    }
+
+    body.game-active canvas {
+        width: 100%;
+        max-width: 100%;
+        flex-shrink: 1;
+        min-height: 0;
+        border: 2px solid white;
+        box-sizing: border-box;
+        aspect-ratio: 800 / 600;
+    }
+
+    body.game-active .game-ui {
+        margin-bottom: 2px;
+        flex-shrink: 0;
+    }
+
+    body.game-active .touch-controls {
+        flex-shrink: 0;
+        padding: 12px 4px 4px 4px;
+        padding-bottom: max(4px, env(safe-area-inset-bottom, 4px));
+    }
+
+    .touch-controls-right {
+        display: flex;
+        align-items: center;
+    }
+}
+
+/* Responsive — phones portrait */
+@media (max-width: 480px) {
+    html, body {
+        font-size: 10px;
+    }
+
+    .nav-bar {
+        padding: 4px 8px;
+        gap: 6px;
+    }
+
+    .container {
+        padding: 4px;
+    }
+
+    /* Maximize game viewport — remove container border/padding */
+    #game-section .nes-container {
+        border: none;
+        padding: 2px;
+    }
+
+    .game-ui {
+        margin-bottom: 2px;
+        font-size: 0.8em;
+    }
+
+    canvas {
+        border-width: 2px;
+    }
+
+    .modal-content,
+    .payment-modal-content {
+        width: 95%;
+        padding: 15px;
+    }
+
+    .tabs .tab {
+        padding: 8px 12px;
+        font-size: 0.8em;
+    }
+
+    .leaderboard-table th,
+    .leaderboard-table td {
+        padding: 4px 6px;
+        font-size: 0.7em;
+    }
+
+    .touch-controls .touch-btn {
+        width: 48px;
+        height: 48px;
+        font-size: 12px;
+    }
+
+    .touch-fire {
+        width: 60px !important;
+        height: 60px !important;
+        font-size: 10px !important;
+    }
+
+    .game-over-overlay {
+        width: 95%;
+        padding: 15px;
+    }
+}
+
+/* Landscape mode on touch devices */
+@media (orientation: landscape) and (pointer: coarse) {
+    .nav-bar {
+        padding: 2px 10px;
+        gap: 4px;
+    }
+
+    .container {
+        padding: 2px;
+    }
+
+    /* Full-viewport landscape game layout using CSS grid */
+    /* Layout: [d-pad | canvas | fire] with HUD spanning top */
+    body.game-active .game-container {
+        display: grid !important;
+        flex-direction: unset !important;
+        grid-template-columns: auto 1fr auto;
+        grid-template-rows: auto 1fr;
+        max-width: 100%;
+        overflow: hidden;
+    }
+
+    /* HUD spans full width */
+    body.game-active .game-ui {
+        grid-column: 1 / -1;
+        grid-row: 1;
+        font-size: 0.7em;
+    }
+
+    /* Canvas fills center — constrained by height, maintains 4:3 */
+    body.game-active canvas {
+        grid-column: 2;
+        grid-row: 2;
+        max-height: 100% !important;
+        width: auto !important;
+        max-width: 100% !important;
+        min-width: 0;
+        min-height: 0;
+        border: 2px solid white !important;
+        box-sizing: border-box !important;
+        aspect-ratio: 800 / 600;
+        justify-self: center;
+        align-self: center;
+    }
+
+    /* Touch controls wrapper becomes a grid item spanning the sides */
+    body.game-active .touch-controls {
+        display: contents !important;
+        margin-top: 0 !important;
+        padding-bottom: 0 !important;
+    }
+
+    /* D-pad on the left — vertically centered */
+    body.game-active .touch-controls-left {
+        grid-column: 1;
+        grid-row: 2;
+        display: flex;
+        align-items: center;
+        padding: 8px 16px;
+        padding-left: max(16px, env(safe-area-inset-left, 16px));
+    }
+
+    /* Fire button on the right — vertically centered */
+    body.game-active .touch-controls-right {
+        grid-column: 3;
+        grid-row: 2;
+        display: flex;
+        align-items: center;
+        padding: 8px 16px;
+        padding-right: max(16px, env(safe-area-inset-right, 16px));
+    }
+
+    .touch-controls .touch-btn {
+        width: 48px;
+        height: 48px;
+        font-size: 12px;
+    }
+
+    .touch-fire {
+        width: 56px !important;
+        height: 56px !important;
+        font-size: 9px !important;
+    }
+
+    .touch-dpad {
+        gap: 4px;
+    }
+
+    .touch-dpad-row {
+        gap: 4px;
+    }
+
+    #start-screen {
+        min-height: auto;
+        padding: 10px;
+    }
+
+    #welcome-screen {
+        min-height: auto;
     }
 }
 

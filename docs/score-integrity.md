@@ -62,7 +62,7 @@ All bot detection signals are stored in `score_metadata` for monitoring via the 
 
 ## Other Mitigations
 
-- **Economic deterrent**: Every game costs real sats (configurable entry fee). A bot needs to consistently win the daily competition to be profitable — a single human player winning breaks the bot's ROI.
+- **Economic deterrent**: Every game costs real sats (configurable, default 1000 sats for 5 plays with a 60-minute expiry window). A bot needs to consistently win the daily competition to be profitable — a single human player winning breaks the bot's ROI.
 - **Session ownership**: Verified against `user_id`
 - **Nostr authentication**: Every API call requires a signed NIP-98 event
 - **Nostr audit ledger**: Every verified score is published with seed, frames, and input hash — anyone can independently replay

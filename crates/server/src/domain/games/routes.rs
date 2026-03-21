@@ -1,5 +1,5 @@
 use axum::{
-    extract::{ConnectInfo, Query, State},
+    extract::{ConnectInfo, Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     Json,
@@ -221,7 +221,7 @@ pub async fn start_new_session(
                     pending_payment.payment_id
                 );
 
-                let plays_per_payment = state.settings.competition_settings.plays_per_payment;
+                let comp = &state.settings.competition_settings;
 
                 if let Err(e) = state
                     .payment_store
@@ -231,10 +231,14 @@ pub async fn start_new_session(
                     error!("Failed to update payment status: {}", e);
                 }
 
-                // Grant plays for this payment
+                // Grant plays for this payment with expiry
                 if let Err(e) = state
                     .payment_store
-                    .set_plays_remaining(&pending_payment.payment_id, plays_per_payment)
+                    .set_plays_remaining(
+                        &pending_payment.payment_id,
+                        comp.plays_per_payment,
+                        comp.plays_ttl_minutes,
+                    )
                     .await
                 {
                     error!("Failed to set plays_remaining: {}", e);
@@ -712,6 +716,20 @@ pub async fn get_top_replays(
 
     match state.game_store.get_top_replays(3).await {
         Ok(replays) => Ok((StatusCode::OK, Json(replays))),
+        Err(e) => Err(map_error(e)),
+    }
+}
+
+// Get replay data for a specific score
+pub async fn get_replay_by_score(
+    Path(score_id): Path<i64>,
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, Response> {
+    info!("Get replay for score_id: {}", score_id);
+
+    match state.game_store.get_replay_by_score_id(score_id).await {
+        Ok(Some(replay)) => Ok((StatusCode::OK, Json(replay))),
+        Ok(None) => Err((StatusCode::NOT_FOUND, "Replay not found").into_response()),
         Err(e) => Err(map_error(e)),
     }
 }

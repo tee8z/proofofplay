@@ -27,9 +27,7 @@ async function registerUser(
     { timeout: 10_000 }
   );
 
-  // Check the "I saved my key" checkbox and click Continue
-  // NES.css wraps the checkbox in a label/span that intercepts clicks
-  await page.check("#recoveryKeySavedCheckbox", { force: true });
+  // Click "I have saved my recovery key" to continue
   await page.click("#usernameRegisterComplete");
 
   // Wait for auth to complete — nav shows username

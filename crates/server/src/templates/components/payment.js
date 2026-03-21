@@ -87,11 +87,12 @@ class PaymentHandler {
         if (this.qrContainer) this.qrContainer.innerHTML = "";
         if (this.paymentRequest) this.paymentRequest.value = paymentData.invoice;
 
-        // Create Bitcoin QR code element
+        // Create Bitcoin QR code element — size based on viewport
+        const qrSize = Math.min(250, window.innerWidth - 100);
         const qrElement = document.createElement("bitcoin-qr");
         qrElement.setAttribute("lightning", paymentData.invoice);
-        qrElement.setAttribute("width", 250);
-        qrElement.setAttribute("height", 250);
+        qrElement.setAttribute("width", qrSize);
+        qrElement.setAttribute("height", qrSize);
         qrElement.setAttribute("dots-type", "rounded");
         qrElement.setAttribute("corners-square-type", "extra-rounded");
         qrElement.setAttribute("background-color", "#ffffff");
@@ -100,7 +101,8 @@ class PaymentHandler {
 
         if (this.paymentStatus) {
             const amount = paymentData.amount_sats || 500;
-            this.paymentStatus.innerHTML = `<p>Waiting for payment...</p><p class="nes-text is-primary">Amount: ${amount} sats</p><p class="nes-text is-success">You'll get 5 plays!</p>`;
+            const plays = document.body.getAttribute("data-plays-per-payment") || "5";
+            this.paymentStatus.innerHTML = `<p>Waiting for payment...</p><p class="nes-text is-primary">Amount: ${amount} sats</p><p class="nes-text is-success">You'll get ${plays} plays!</p>`;
         }
 
         if (this.paymentModal) this.paymentModal.style.display = "block";
@@ -115,14 +117,43 @@ class PaymentHandler {
 
     copyInvoiceToClipboard() {
         if (!this.paymentRequest) return;
-        navigator.clipboard.writeText(this.paymentRequest.value).then(() => {
-            if (this.copyFeedback) {
-                this.copyFeedback.classList.add("visible");
-                setTimeout(() => { this.copyFeedback.classList.remove("visible"); }, 2000);
-            }
-        }).catch((err) => {
-            console.error("Failed to copy:", err);
-        });
+        const value = this.paymentRequest.value;
+        const self = this;
+
+        // Try modern clipboard API first
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(value).then(() => {
+                self.showCopyFeedback();
+            }).catch(() => {
+                self.fallbackCopy(value);
+            });
+        } else {
+            self.fallbackCopy(value);
+        }
+    }
+
+    fallbackCopy(text) {
+        // iOS Safari needs a temporary editable textarea
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        ta.style.top = "0";
+        ta.setAttribute("readonly", "");
+        document.body.appendChild(ta);
+        ta.removeAttribute("readonly");
+        ta.select();
+        ta.setSelectionRange(0, 99999);
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        this.showCopyFeedback();
+    }
+
+    showCopyFeedback() {
+        if (this.copyFeedback) {
+            this.copyFeedback.classList.add("visible");
+            setTimeout(() => { this.copyFeedback.classList.remove("visible"); }, 2000);
+        }
     }
 
     startPaymentCheck() {
@@ -163,7 +194,8 @@ class PaymentHandler {
             } else {
                 if (this.paymentStatus) {
                     const amount = this.paymentData?.amount_sats || 500;
-                    this.paymentStatus.innerHTML = `<p>Waiting for payment...</p><p class="nes-text is-primary">Amount: ${amount} sats</p><p class="nes-text is-success">You'll get 5 plays!</p>`;
+                    const plays = document.body.getAttribute("data-plays-per-payment") || "5";
+                    this.paymentStatus.innerHTML = `<p>Waiting for payment...</p><p class="nes-text is-primary">Amount: ${amount} sats</p><p class="nes-text is-success">You'll get ${plays} plays!</p>`;
                 }
             }
         } catch (error) {
