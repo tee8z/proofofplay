@@ -7,3 +7,7 @@
 .direnv/
 result
 wg-keys/
+node_modules/
+playwright-report/
+test-results/
+/data/test/

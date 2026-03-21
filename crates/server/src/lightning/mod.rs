@@ -38,6 +38,9 @@ pub struct PaymentStatusResult {
 pub enum LightningProvider {
     Voltage(LightningService),
     Lnd(LndClient),
+    /// Stub provider for testing — invoices are created with fake bolt11 strings
+    /// and `check_payment_status` always returns "paid".
+    Stub,
 }
 
 impl std::fmt::Debug for LightningProvider {
@@ -45,6 +48,7 @@ impl std::fmt::Debug for LightningProvider {
         match self {
             Self::Voltage(_) => write!(f, "LightningProvider::Voltage"),
             Self::Lnd(_) => write!(f, "LightningProvider::Lnd"),
+            Self::Stub => write!(f, "LightningProvider::Stub"),
         }
     }
 }
@@ -74,6 +78,15 @@ impl LightningProvider {
                 Ok(InvoiceResult {
                     payment_id: r_hash_hex,
                     invoice: Some(resp.payment_request),
+                })
+            }
+            Self::Stub => {
+                let payment_id = uuid::Uuid::new_v4().to_string().replace('-', "");
+                let invoice = format!("lnbcrt{}n1stub_{}", amount_sats, payment_id);
+                info!("Stub: created invoice {}", payment_id);
+                Ok(InvoiceResult {
+                    payment_id,
+                    invoice: Some(invoice),
                 })
             }
         }
@@ -121,6 +134,13 @@ impl LightningProvider {
                     invoice: Some(lookup.payment_request),
                 })
             }
+            Self::Stub => {
+                info!("Stub: payment {} is paid", payment_id);
+                Ok(PaymentStatusResult {
+                    status: "paid".to_string(),
+                    invoice: Some(format!("lnbcrt_stub_{}", payment_id)),
+                })
+            }
         }
     }
 
@@ -148,6 +168,11 @@ impl LightningProvider {
                     )));
                 }
                 Ok(resp.payment_hash)
+            }
+            Self::Stub => {
+                let payment_hash = uuid::Uuid::new_v4().to_string().replace('-', "");
+                info!("Stub: sent payment {} sats -> {}", amount_sats, payment_hash);
+                Ok(payment_hash)
             }
         }
     }

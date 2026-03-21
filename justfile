@@ -81,6 +81,23 @@ clippy:
 # Run all checks (format, clippy, test)
 check: fmt-check clippy test
 
+# Run e2e tests (builds wasm + starts server with stub Lightning)
+test-e2e: build-wasm
+    npx playwright test
+
+# Run e2e tests with browser UI
+test-e2e-ui: build-wasm
+    npx playwright test --ui
+
+# Run e2e tests in headed mode (visible browser)
+test-e2e-headed: build-wasm
+    npx playwright test --headed
+
+# Install e2e test dependencies
+setup-e2e:
+    npm install
+    npx playwright install chromium
+
 # ============================================
 # Run Commands
 # ============================================

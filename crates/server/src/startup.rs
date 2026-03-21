@@ -154,6 +154,10 @@ pub async fn build_app(config: Settings) -> Result<(AppState, ServeDir), anyhow:
             )?;
             LightningProvider::Lnd(lnd_client)
         }
+        "stub" => {
+            info!("Lightning provider: Stub (testing mode — all invoices auto-settle)");
+            LightningProvider::Stub
+        }
         _ => {
             info!("Lightning provider: Voltage");
             LightningProvider::Voltage(lightning_service.clone())
