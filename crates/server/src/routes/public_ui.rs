@@ -1,19 +1,21 @@
 use std::sync::Arc;
 
 use axum::{extract::State, response::Html};
-use log::info;
-use tokio::fs;
 
 use crate::startup::AppState;
+use crate::templates::layouts::base::{base, PageConfig};
 
 pub async fn index_handler(State(state): State<Arc<AppState>>) -> Html<String> {
-    Html(public_index(&state.remote_url, &state.ui_dir).await)
-}
-
-pub async fn public_index(remote_url: &str, ui_dir: &str) -> String {
-    let file_content = fs::read_to_string(&format!("{}/index.html", ui_dir))
-        .await
-        .expect("Unable to read index.html");
-    info!("remote_url: {}", remote_url);
-    file_content.replace("{SERVER_ADDRESS}", remote_url)
+    let config = PageConfig {
+        title: "Not Found - Proof of Play",
+        api_base: &state.remote_url,
+    };
+    let content = maud::html! {
+        div class="nes-container is-dark" style="text-align: center; margin-top: 40px;" {
+            h1 class="nes-text is-error" { "404" }
+            p { "Page not found." }
+            a href="/" class="nes-btn is-primary" { "Go Home" }
+        }
+    };
+    Html(base(&config, content).into_string())
 }

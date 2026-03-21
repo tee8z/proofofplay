@@ -28,19 +28,20 @@ use tokio::{
 };
 use tower_http::{
     cors::{Any, CorsLayer},
-    services::{ServeDir, ServeFile},
+    services::ServeDir,
 };
 
 use nostr_sdk::Keys;
 
 use crate::{
     check_payment_status, check_prize_eligibility, claim_prize, config::Settings,
-    file_utils::create_folder, game_handler, get_game_config, get_ledger_events,
-    get_ledger_summary, get_server_pubkey, get_top_scores, get_user_scores, health_check,
-    home_handler, index_handler, leaderboard_handler, leaderboard_rows_handler, login,
-    login_username, nav_fragment_handler, register, register_username, run_daily_tasks,
-    secrets::get_key, start_new_session, submit_score, GameStore, LedgerService, LedgerStore,
-    LightningProvider, LightningService, LndClient, PaymentStore, UserStore,
+    file_utils::create_folder, game_handler, get_competition_info, get_game_config,
+    get_ledger_events, get_ledger_summary, get_server_pubkey, get_top_scores, get_user_scores,
+    health_check, home_handler, index_handler, leaderboard_handler, leaderboard_rows_handler,
+    login, login_username, nav_fragment_handler, register, register_username,
+    routes::admin::admin_dashboard, run_daily_tasks, secrets::get_key, start_new_session,
+    submit_score, GameStore, LedgerService, LedgerStore, LightningProvider, LightningService,
+    LndClient, PaymentStore, UserStore,
 };
 pub struct Application {
     server: Serve<
@@ -79,6 +80,7 @@ impl Application {
 
 #[derive(Clone)]
 pub struct AppState {
+    pub settings: Settings,
     pub ui_dir: String,
     pub remote_url: String,
     pub user_store: UserStore,
@@ -92,17 +94,9 @@ pub struct AppState {
     pub ledger_service: LedgerService,
 }
 
-pub async fn build_app(config: Settings) -> Result<(AppState, ServeDir<ServeFile>), anyhow::Error> {
+pub async fn build_app(config: Settings) -> Result<(AppState, ServeDir), anyhow::Error> {
     // The ui folder needs to be generated and have this relative path from where the binary is being run
-    let serve_dir = ServeDir::new(config.ui_settings.ui_dir.clone())
-        .not_found_service(ServeFile::new(format!(
-            "{}/index.html",
-            config.ui_settings.ui_dir
-        )))
-        .fallback(ServeFile::new(format!(
-            "{}/index.html",
-            config.ui_settings.ui_dir
-        )));
+    let serve_dir = ServeDir::new(config.ui_settings.ui_dir.clone());
     info!("Public UI configured");
 
     create_folder(&config.db_settings.data_folder.clone());
@@ -172,14 +166,15 @@ pub async fn build_app(config: Settings) -> Result<(AppState, ServeDir<ServeFile
     let ledger_service = LedgerService::new(keys, ledger_store);
 
     let app_state = AppState {
-        ui_dir: config.ui_settings.ui_dir,
-        remote_url: config.ui_settings.remote_url,
+        ui_dir: config.ui_settings.ui_dir.clone(),
+        remote_url: config.ui_settings.remote_url.clone(),
         user_store: UserStore::new(db_pool.clone()),
         game_store: GameStore::new(db_pool.clone()),
         payment_store: PaymentStore::new(db_pool.clone()),
         lightning_service,
         lightning_provider,
         ledger_service,
+        settings: config,
     };
     Ok((app_state, serve_dir))
 }
@@ -187,7 +182,7 @@ pub async fn build_app(config: Settings) -> Result<(AppState, ServeDir<ServeFile
 pub async fn build_server(
     socket_addr: SocketAddr,
     app_state: AppState,
-    serve_dir: ServeDir<ServeFile>,
+    serve_dir: ServeDir,
 ) -> Result<
     Serve<
         TcpListener,
@@ -217,7 +212,7 @@ pub async fn build_server(
     Ok(server)
 }
 
-pub fn app(app_state: AppState, serve_dir: ServeDir<ServeFile>) -> Router {
+pub fn app(app_state: AppState, serve_dir: ServeDir) -> Router {
     let cors = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
         .allow_headers([ACCEPT, CONTENT_TYPE, AUTHORIZATION])
@@ -234,7 +229,8 @@ pub fn app(app_state: AppState, serve_dir: ServeDir<ServeFile>) -> Router {
         .route("/session", post(start_new_session))
         .route("/score", post(submit_score))
         .route("/scores/top", get(get_top_scores))
-        .route("/scores/user", get(get_user_scores));
+        .route("/scores/user", get(get_user_scores))
+        .route("/competition", get(get_competition_info));
 
     let payment_endpoints = Router::new().route("/status/{payment_id}", get(check_payment_status));
 
@@ -259,7 +255,7 @@ pub fn app(app_state: AppState, serve_dir: ServeDir<ServeFile>) -> Router {
         .route("/fragments/leaderboard-rows", get(leaderboard_rows_handler))
         .route("/fragments/nav", get(nav_fragment_handler))
         .fallback(index_handler)
-        //TODO: do a check against the voltage api to make sure that's all okay
+        .route("/admin", get(admin_dashboard))
         .route("/api/v1/health_check", get(health_check))
         .nest("/api/v1/users", users_endpoints)
         .nest("/api/v1/game", game_endpoints)

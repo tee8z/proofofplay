@@ -120,7 +120,10 @@ pub async fn check_payment_status(
             )),
         },
         Err(e) => {
-            error!("Error checking payment status with Lightning provider: {}", e);
+            error!(
+                "Error checking payment status with Lightning provider: {}",
+                e
+            );
 
             Ok((
                 StatusCode::OK,
@@ -265,7 +268,9 @@ pub async fn check_prize_eligibility(
         }
     };
 
-    let prize_amount = (total_games * 450) as i64; // 90% of 500 sats * number of games
+    let comp = &state.settings.competition_settings;
+    let prize_per_game = comp.entry_fee_sats * (comp.prize_pool_pct as i64) / 100;
+    let prize_amount = total_games * prize_per_game;
 
     if prize_amount <= 0 {
         return Ok((
@@ -423,7 +428,6 @@ pub async fn claim_prize(
         .await
     {
         Ok(payment_id) => {
-
             // Update the prize record
             match state
                 .payment_store

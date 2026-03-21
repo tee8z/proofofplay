@@ -1,4 +1,4 @@
-# Astroid Comp - Development & Deployment Commands
+# Proof of Play - Development & Deployment Commands
 # Run 'just' or 'just --list' to see available commands
 
 # Default recipe - show help
@@ -23,13 +23,13 @@ build-release:
 
 # Build all WASM modules (nostr_signer + game_engine)
 build-wasm:
-    wasm-pack build crates/nostr_signer --target web --out-dir ../public_ui/pkg/nostr_signer
-    wasm-pack build crates/game_engine --target web --out-dir ../public_ui/pkg/game_engine
+    wasm-pack build crates/nostr_signer --target web --out-dir ../../ui/pkg/nostr_signer
+    wasm-pack build crates/game_engine --target web --out-dir ../../ui/pkg/game_engine
 
 # Build WASM modules in release mode
 build-wasm-release:
-    wasm-pack build crates/nostr_signer --target web --release --out-dir ../public_ui/pkg/nostr_signer
-    wasm-pack build crates/game_engine --target web --release --out-dir ../public_ui/pkg/game_engine
+    wasm-pack build crates/nostr_signer --target web --release --out-dir ../../ui/pkg/nostr_signer
+    wasm-pack build crates/game_engine --target web --release --out-dir ../../ui/pkg/game_engine
 
 # Build everything (cargo + wasm)
 build-all: build build-wasm

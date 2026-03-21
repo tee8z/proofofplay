@@ -8,15 +8,31 @@ use crate::startup::AppState;
 // Process to run daily to find winners and set up prizes
 pub async fn run_daily_tasks(app_state: Arc<AppState>) {
     info!("Starting daily tasks runner");
+    let comp = &app_state.settings.competition_settings;
+    let (end_hour, end_minute) = comp.end_hour_minute();
+    info!(
+        "Competition window: {} - {} UTC, checking every {}s",
+        comp.start_time, comp.end_time, comp.check_interval_secs,
+    );
 
-    let mut interval = tokio_time::interval(tokio_time::Duration::from_secs(3600)); // Run every hour
+    let prize_per_game = comp.entry_fee_sats * (comp.prize_pool_pct as i64) / 100;
+
+    let mut interval =
+        tokio_time::interval(tokio_time::Duration::from_secs(comp.check_interval_secs));
+    let mut last_processed_date: Option<String> = None;
 
     loop {
         interval.tick().await;
 
-        // Check if it's the right time to run (e.g., 00:05 AM)
         let now = OffsetDateTime::now_utc();
-        if now.hour() == 0 && now.minute() >= 5 && now.minute() < 15 {
+        let today = now.date().to_string();
+
+        // Process winners once end_time has passed, but only once per day
+        let past_end =
+            now.hour() > end_hour || (now.hour() == end_hour && now.minute() >= end_minute);
+        let already_processed = last_processed_date.as_deref() == Some(&today);
+
+        if past_end && !already_processed {
             info!("Running daily tasks to find winners");
 
             // Calculate yesterday's date
@@ -52,8 +68,7 @@ pub async fn run_daily_tasks(app_state: Arc<AppState>) {
                     {
                         Ok(games_count) => {
                             if games_count > 0 {
-                                // Calculate prize (90% of collected fees)
-                                let prize_amount = games_count * 450; // 90% of 500 sats per game
+                                let prize_amount = games_count * prize_per_game;
 
                                 // Record the winner
                                 match app_state
@@ -74,6 +89,7 @@ pub async fn run_daily_tasks(app_state: Arc<AppState>) {
                                         if let Ok(Some(winner_user)) =
                                             app_state.user_store.find_by_id(scorer.user_id).await
                                         {
+                                            let total_pool = games_count * comp.entry_fee_sats;
                                             if let Err(e) = app_state
                                                 .ledger_service
                                                 .publish_competition_result(
@@ -81,7 +97,7 @@ pub async fn run_daily_tasks(app_state: Arc<AppState>) {
                                                     &winner_user.nostr_pubkey,
                                                     scorer.score,
                                                     games_count,
-                                                    games_count * 500, // total pool (500 sats per game)
+                                                    total_pool,
                                                     prize_amount,
                                                 )
                                                 .await
@@ -112,6 +128,8 @@ pub async fn run_daily_tasks(app_state: Arc<AppState>) {
                     error!("Failed to find top scorer for {}: {}", yesterday, e);
                 }
             }
+
+            last_processed_date = Some(today);
         }
     }
 }

@@ -3,6 +3,7 @@
 /config/local.toml
 /creds
 /crates/server/static/
-/crates/public_ui/pkg/
+/ui/
 .direnv/
 result
+wg-keys/

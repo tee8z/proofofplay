@@ -84,6 +84,17 @@ impl Fixed {
         // cos(a) = sin(a + 64) since 64 = quarter circle in 256-unit system
         lookup_sin(self + Fixed::from(64))
     }
+
+    /// atan2(y, x) returning angle in 256-unit system.
+    /// Simple approximation: convert to f64, compute, convert back.
+    pub fn atan2(y: Fixed, x: Fixed) -> Fixed {
+        let yf = y.0 as f64 / SCALE as f64;
+        let xf = x.0 as f64 / SCALE as f64;
+        let radians = yf.atan2(xf);
+        // Convert radians to 256-unit: angle = radians * 256 / (2*PI)
+        let angle_256 = radians * 256.0 / core::f64::consts::TAU;
+        Fixed((angle_256 * SCALE as f64) as i64)
+    }
 }
 
 impl From<i32> for Fixed {

@@ -32,6 +32,12 @@ pub struct Settings {
     pub ui_settings: UISettings,
     #[serde(default)]
     pub ln_settings: LnSettings,
+    #[serde(default)]
+    pub competition_settings: CompetitionSettings,
+    #[serde(default)]
+    pub bot_detection: BotDetectionSettings,
+    #[serde(default)]
+    pub admin: AdminSettings,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -59,7 +65,7 @@ impl Default for UISettings {
     fn default() -> Self {
         UISettings {
             remote_url: String::from("http://127.0.0.1:8900"),
-            ui_dir: String::from("./crates/public_ui"),
+            ui_dir: String::from("./ui"),
         }
     }
 }
@@ -115,6 +121,95 @@ impl Default for LnSettings {
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CompetitionSettings {
+    /// When the competition window opens (HH:MM in UTC, e.g. "00:00")
+    pub start_time: String,
+    /// When the competition window closes and winner is determined (HH:MM in UTC, e.g. "23:59")
+    /// Only scores submitted between start_time and end_time count.
+    pub end_time: String,
+    /// How often to check if it's time to process winners (in seconds)
+    pub check_interval_secs: u64,
+    /// Entry fee in sats
+    pub entry_fee_sats: i64,
+    /// Prize pool percentage (0-100) — remainder goes to server
+    pub prize_pool_pct: u8,
+}
+
+impl CompetitionSettings {
+    /// Parse "HH:MM" into (hour, minute)
+    fn parse_time(time_str: &str) -> (u8, u8) {
+        let parts: Vec<&str> = time_str.split(':').collect();
+        let hour = parts.first().and_then(|h| h.parse().ok()).unwrap_or(0);
+        let minute = parts.get(1).and_then(|m| m.parse().ok()).unwrap_or(0);
+        (hour, minute)
+    }
+
+    pub fn start_hour_minute(&self) -> (u8, u8) {
+        Self::parse_time(&self.start_time)
+    }
+
+    pub fn end_hour_minute(&self) -> (u8, u8) {
+        Self::parse_time(&self.end_time)
+    }
+}
+
+impl Default for CompetitionSettings {
+    fn default() -> Self {
+        CompetitionSettings {
+            start_time: "00:00".to_string(),
+            end_time: "23:59".to_string(),
+            check_interval_secs: 3600,
+            entry_fee_sats: 500,
+            prize_pool_pct: 90,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BotDetectionSettings {
+    pub enabled: bool,
+    /// Max distinct accounts allowed from one IP in a rolling hour
+    pub max_accounts_per_ip_per_hour: u32,
+    /// Max sessions from one IP in a rolling hour
+    pub max_sessions_per_ip_per_hour: u32,
+    /// Minimum frame timing variance in microseconds^2.
+    /// Human play: 5000+. Perfect setInterval: <1000.
+    pub min_timing_variance_us2: u64,
+    /// Max mean timing offset in microseconds (positive = slower than real-time).
+    /// Catches slow-motion cheating.
+    pub max_mean_offset_us: i64,
+}
+
+impl Default for BotDetectionSettings {
+    fn default() -> Self {
+        BotDetectionSettings {
+            enabled: true,
+            max_accounts_per_ip_per_hour: 5,
+            max_sessions_per_ip_per_hour: 20,
+            min_timing_variance_us2: 1000,
+            max_mean_offset_us: 50000,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AdminSettings {
+    /// CIDR subnet(s) allowed to access /admin (e.g. "10.100.0.0/24", "127.0.0.1/32")
+    pub allowed_subnets: Vec<String>,
+}
+
+impl Default for AdminSettings {
+    fn default() -> Self {
+        AdminSettings {
+            allowed_subnets: vec![
+                "10.100.0.0/24".to_string(),
+                "127.0.0.1/32".to_string(),
+                "::1/128".to_string(),
+            ],
+        }
+    }
+}
 
 pub fn get_settings() -> Result<Settings, anyhow::Error> {
     let cli = Cli::parse();

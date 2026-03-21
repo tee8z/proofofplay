@@ -1,3 +1,4 @@
+use game_engine::config::GameConfig as EngineConfig;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Sqlite};
 use time::{Duration, OffsetDateTime};
@@ -14,6 +15,9 @@ pub struct GameSession {
     pub start_time: String,
     pub last_active: String,
     pub difficulty_factor: f64,
+    pub seed: Option<String>,
+    pub engine_config: Option<String>,
+    pub client_ip: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,6 +61,8 @@ pub struct GameConfigResponse {
     pub session_id: String,
     pub expiration_time: u64,
     pub fps: u64,
+    pub seed: String,
+    pub engine_config: serde_json::Value,
     pub ship: ShipConfig,
     pub bullets: BulletsConfig,
     pub asteroids: AsteroidsConfig,
@@ -105,6 +111,29 @@ pub struct ScoringConfig {
     pub level_multiplier: f64,
 }
 
+pub struct ScoreMetadata {
+    pub score_id: i64,
+    pub session_id: String,
+    pub user_id: i64,
+    pub username: String,
+    pub client_ip: Option<String>,
+    pub score: i64,
+    pub level: i64,
+    pub frames: u32,
+    pub play_time: i64,
+    pub server_elapsed_secs: f64,
+    pub expected_play_secs: f64,
+    pub server_timing_ratio: f64,
+    pub client_claimed_secs: Option<f64>,
+    pub timing_cross_ref_ratio: Option<f64>,
+    pub timing_variance_us2: Option<f64>,
+    pub timing_mean_offset_us: Option<f64>,
+    pub ip_session_count: Option<i64>,
+    pub ip_account_count: Option<i64>,
+    pub flags: Vec<String>,
+    pub rejected: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct GameStore {
     db: Pool<Sqlite>,
@@ -115,28 +144,45 @@ impl GameStore {
         Self { db }
     }
 
+    pub fn get_pool(&self) -> Pool<Sqlite> {
+        self.db.clone()
+    }
+
     pub async fn ping(&self) -> Result<(), Error> {
         sqlx::query!("SELECT 1 as ping").fetch_one(&self.db).await?;
         Ok(())
     }
 
-    pub async fn create_session(&self, user_id: i64) -> Result<GameSession, Error> {
+    pub async fn create_session(
+        &self,
+        user_id: i64,
+        client_ip: &str,
+    ) -> Result<GameSession, Error> {
         let session_id = format!("session_{}", Uuid::now_v7());
         let now = OffsetDateTime::now_utc().to_string();
 
+        let seed: u64 = rand::random();
+        let seed_hex = format!("{:016x}", seed);
+
+        // Build deterministic engine config
+        let engine_config = EngineConfig::default_config();
+        let engine_config_json = serde_json::to_string(&engine_config).map_err(|e| {
+            Error::InvalidInput(format!("Failed to serialize engine config: {}", e))
+        })?;
+
         let session_id_clone = session_id.clone();
 
-        let id = sqlx::query!(
-            r#"
-            INSERT INTO game_sessions (session_id, user_id, start_time, last_active, difficulty_factor)
-            VALUES (?, ?, ?, ?, ?)
-            "#,
-            session_id,
-            user_id,
-            now,
-            now,
-            1.0 // Initial difficulty
+        let id = sqlx::query(
+            "INSERT INTO game_sessions (session_id, user_id, start_time, last_active, difficulty_factor, seed, engine_config, client_ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         )
+        .bind(&session_id)
+        .bind(user_id)
+        .bind(&now)
+        .bind(&now)
+        .bind(1.0f64)
+        .bind(&seed_hex)
+        .bind(&engine_config_json)
+        .bind(client_ip)
         .execute(&self.db)
         .await?
         .last_insert_rowid();
@@ -148,23 +194,34 @@ impl GameStore {
             start_time: now.clone(),
             last_active: now,
             difficulty_factor: 1.0,
+            seed: Some(seed_hex),
+            engine_config: Some(engine_config_json),
+            client_ip: Some(client_ip.to_string()),
         })
     }
 
     pub async fn find_session(&self, session_id: &str) -> Result<Option<GameSession>, Error> {
-        let session = sqlx::query_as!(
-            GameSession,
-            r#"
-            SELECT id, session_id, user_id, start_time, last_active, difficulty_factor
-            FROM game_sessions
-            WHERE session_id = ?
-            "#,
-            session_id
+        let row = sqlx::query(
+            "SELECT id, session_id, user_id, start_time, last_active, difficulty_factor, seed, engine_config, client_ip FROM game_sessions WHERE session_id = ?"
         )
+        .bind(session_id)
         .fetch_optional(&self.db)
         .await?;
 
-        Ok(session)
+        Ok(row.map(|r| {
+            use sqlx::Row;
+            GameSession {
+                id: r.get("id"),
+                session_id: r.get("session_id"),
+                user_id: r.get("user_id"),
+                start_time: r.get("start_time"),
+                last_active: r.get("last_active"),
+                difficulty_factor: r.get("difficulty_factor"),
+                seed: r.get("seed"),
+                engine_config: r.get("engine_config"),
+                client_ip: r.get("client_ip"),
+            }
+        }))
     }
 
     pub async fn update_session_activity(&self, session_id: &str) -> Result<GameSession, Error> {
@@ -217,6 +274,9 @@ impl GameStore {
             start_time: session.start_time,
             last_active: now,
             difficulty_factor: difficulty,
+            seed: session.seed,
+            engine_config: session.engine_config,
+            client_ip: session.client_ip,
         })
     }
 
@@ -251,6 +311,15 @@ impl GameStore {
         // Apply difficulty factor from session
         let difficulty = session.difficulty_factor;
 
+        // Parse the stored engine config, or use default
+        let engine_config_value: serde_json::Value = session
+            .engine_config
+            .as_ref()
+            .and_then(|c| serde_json::from_str(c).ok())
+            .unwrap_or_else(|| serde_json::to_value(EngineConfig::default_config()).unwrap());
+
+        let seed = session.seed.clone().unwrap_or_default();
+
         // Return config with difficulty scaling
         Ok(GameConfigResponse {
             version,
@@ -258,6 +327,8 @@ impl GameStore {
             session_id: session.session_id.clone(),
             expiration_time: expiration_ms as u64,
             fps: 60,
+            seed,
+            engine_config: engine_config_value,
             ship: ShipConfig {
                 radius: 10,
                 turn_speed: 0.1,
@@ -272,15 +343,12 @@ impl GameStore {
                 life_time: 60,
             },
             asteroids: AsteroidsConfig {
-                // Scale asteroid count with difficulty
                 initial_count: (5.0 * difficulty) as u64,
-                // Scale asteroid speed with difficulty
                 speed: (1.0 * difficulty) as u64,
                 size: 30,
                 vertices: VerticesConfig { min: 7, max: 15 },
             },
             scoring: ScoringConfig {
-                // Make points worth more as difficulty increases
                 points_per_asteroid: (10.0 * difficulty) as u64,
                 level_multiplier: 1.5,
             },
@@ -366,5 +434,70 @@ impl GameStore {
         .await?;
 
         Ok(scores)
+    }
+
+    pub async fn get_ip_activity(&self, client_ip: &str) -> Result<(i64, i64), Error> {
+        let row = sqlx::query(
+            "SELECT COUNT(*) as session_count, COUNT(DISTINCT user_id) as account_count FROM game_sessions WHERE client_ip = ? AND start_time >= datetime('now', '-1 hour')"
+        )
+        .bind(client_ip)
+        .fetch_one(&self.db)
+        .await?;
+
+        use sqlx::Row;
+        Ok((row.get("session_count"), row.get("account_count")))
+    }
+
+    pub async fn save_score_metadata(&self, meta: &ScoreMetadata) -> Result<(), Error> {
+        let flags = if meta.flags.is_empty() {
+            None
+        } else {
+            Some(meta.flags.join(","))
+        };
+        sqlx::query(
+            "INSERT INTO score_metadata (score_id, session_id, user_id, username, client_ip, score, level, frames, play_time, server_elapsed_secs, expected_play_secs, server_timing_ratio, client_claimed_secs, timing_cross_ref_ratio, timing_variance_us2, timing_mean_offset_us, ip_session_count, ip_account_count, flags, rejected) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(meta.score_id)
+        .bind(&meta.session_id)
+        .bind(meta.user_id)
+        .bind(&meta.username)
+        .bind(&meta.client_ip)
+        .bind(meta.score)
+        .bind(meta.level)
+        .bind(meta.frames)
+        .bind(meta.play_time)
+        .bind(meta.server_elapsed_secs)
+        .bind(meta.expected_play_secs)
+        .bind(meta.server_timing_ratio)
+        .bind(meta.client_claimed_secs)
+        .bind(meta.timing_cross_ref_ratio)
+        .bind(meta.timing_variance_us2)
+        .bind(meta.timing_mean_offset_us)
+        .bind(meta.ip_session_count)
+        .bind(meta.ip_account_count)
+        .bind(flags)
+        .bind(meta.rejected as i32)
+        .execute(&self.db)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn save_input_log(
+        &self,
+        session_id: &str,
+        input_log: &[u8],
+        input_hash: &str,
+    ) -> Result<(), Error> {
+        let now = OffsetDateTime::now_utc().to_string();
+        sqlx::query(
+            "INSERT INTO game_input_logs (session_id, input_log, input_hash, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(session_id) DO UPDATE SET input_log = excluded.input_log, input_hash = excluded.input_hash"
+        )
+        .bind(session_id)
+        .bind(input_log)
+        .bind(input_hash)
+        .bind(&now)
+        .execute(&self.db)
+        .await?;
+        Ok(())
     }
 }

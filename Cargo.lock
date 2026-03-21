@@ -2988,6 +2988,7 @@ dependencies = [
  "config",
  "fern",
  "futures",
+ "game_engine",
  "h2",
  "hex",
  "hyper",

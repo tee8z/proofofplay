@@ -1,4 +1,4 @@
-# Astroid Comp - Local Development Configuration
+# Proof of Play - Local Development Configuration
 # Copy to config/local.toml and adjust as needed:
 #   cp config/local.example.toml config/local.toml
 
@@ -19,7 +19,7 @@ voltage_wallet_id = ""
 
 [ui_settings]
 remote_url = "http://127.0.0.1:8900"
-ui_dir = "./crates/public_ui"
+ui_dir = "./ui"
 
 [ln_settings]
 # Lightning provider: "voltage" or "lnd"
@@ -31,3 +31,24 @@ lnd_base_url = "https://your-lnd-node.example.com"
 lnd_macaroon_path = "/path/to/admin.macaroon"
 # Optional: only needed for self-signed TLS certs
 # lnd_tls_cert_path = "/path/to/tls.cert"
+
+[competition_settings]
+# Competition window: scores between start_time and end_time count
+# Winner is determined shortly after end_time
+start_time = "00:00"
+end_time = "23:59"
+# How often to check if it's time to process winners (in seconds)
+check_interval_secs = 3600
+# Entry fee per game in sats
+entry_fee_sats = 500
+# Percentage of entry fees that go to the prize pool (remainder goes to server)
+prize_pool_pct = 90
+
+[admin]
+# CIDR subnets allowed to access /admin dashboard
+allowed_subnets = ["10.100.0.0/24", "127.0.0.1/32", "::1/128"]
+
+# For testing payouts quickly, use a short window:
+# start_time = "22:00"
+# end_time = "22:10"
+# check_interval_secs = 30

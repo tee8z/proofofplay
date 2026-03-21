@@ -224,8 +224,8 @@ jobs:
             exit 1
           fi
           echo "Checking WASM output..."
-          ls -la crates/public_ui/pkg/nostr_signer/
-          ls -la crates/public_ui/pkg/game_engine/
+          ls -la ui/pkg/nostr_signer/
+          ls -la ui/pkg/game_engine/
           echo "All artifacts verified"
 
       - name: Upload server binary
@@ -240,7 +240,7 @@ jobs:
         with:
           name: ui-assets
           path: |
-            crates/public_ui/pkg/
+            ui/pkg/
             crates/server/static/
           retention-days: 7
 

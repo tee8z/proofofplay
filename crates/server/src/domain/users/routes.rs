@@ -202,10 +202,7 @@ pub async fn login_username(
         })?;
 
     let (hash_to_verify, found_user) = match &user {
-        Some(u) => (
-            u.password_hash.as_deref().unwrap_or(dummy_hash),
-            true,
-        ),
+        Some(u) => (u.password_hash.as_deref().unwrap_or(dummy_hash), true),
         None => (dummy_hash, false),
     };
 

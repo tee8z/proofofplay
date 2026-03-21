@@ -1,61 +1,45 @@
 // Game canvas rendering, input handling, and game loop
-// This handles the actual Asteroids game on the canvas element
+// All game state is managed by the deterministic WASM engine.
+// This JS layer handles: input capture, rendering, and input recording.
 
-let gameState = {
-    score: 0,
-    level: 1,
-    startTime: Date.now(),
-    gameTime: 0,
-};
-
-// Sound effects
-const sounds = {
-    shoot: new Audio(),
-    explosion: new Audio(),
-    levelUp: new Audio(),
-};
-
-// Game config
-let gameConfig = null;
+let engine = null;
+let recorder = null;
 let sessionId = null;
-let lastConfigUpdate = 0;
+let gameInterval = null;
+let gameSeed = null;
 let pendingGameStart = false;
 
-// Game entities
-let ship = {};
-let asteroids = [];
-let bullets = [];
+const FRAME_MS = 1000 / 60; // Fixed 60fps for determinism
+const TIMING_SAMPLE_INTERVAL = 60; // Sample timing every 60 frames (once per second)
 
-// Game objects
-let canvas;
-let ctx;
-let scoreElement;
-let levelElement;
-let timeElement;
-let gameOverDialog;
-let finalScoreElement;
-let restartButton;
+// Input state — tracks which keys are currently held
+const keys = { thrust: false, left: false, right: false, shoot: false };
 
-// Try to load sounds but handle errors gracefully
+// Game timing
+let gameStartTime = 0;
+let frameCounter = 0;
+let lastTimingSample = 0;
+let timingSamples = [];
+
+// DOM elements
+let canvas, ctx, scoreElement, levelElement, timeElement, livesElement;
+let gameOverDialog, finalScoreElement, restartButton;
+
+// Sound effects
+const sounds = { shoot: new Audio(), explosion: new Audio(), levelUp: new Audio() };
 try {
     sounds.shoot.src = "https://www.soundjay.com/mechanical/sounds/laser-gun-19.mp3";
     sounds.explosion.src = "https://www.soundjay.com/mechanical/sounds/explosion-01.mp3";
     sounds.levelUp.src = "https://www.soundjay.com/mechanical/sounds/beep-07.mp3";
-    Object.values(sounds).forEach((sound) => { sound.volume = 0.3; });
-} catch (e) {
-    console.warn("Error loading sounds:", e);
-}
+    Object.values(sounds).forEach((s) => { s.volume = 0.3; });
+} catch (e) { /* sounds are optional */ }
 
 function playSound(sound) {
-    if (sound) {
-        sound.currentTime = 0;
-        sound.play().catch((e) => { console.warn("Could not play audio:", e); });
-    }
+    if (sound) { sound.currentTime = 0; sound.play().catch(() => {}); }
 }
 
 function initializeElements() {
     console.log("Initializing game elements");
-
     canvas = document.getElementById("gameCanvas");
     if (!canvas) {
         console.warn("Game canvas element not found - may not be on game page");
@@ -65,6 +49,7 @@ function initializeElements() {
     scoreElement = document.getElementById("score");
     levelElement = document.getElementById("level");
     timeElement = document.getElementById("time");
+    livesElement = document.getElementById("lives");
     gameOverDialog = document.getElementById("game-over-dialog");
     finalScoreElement = document.getElementById("final-score");
     restartButton = document.getElementById("restart-button");
@@ -75,14 +60,12 @@ function initializeElements() {
             startGame();
         });
     }
-
     console.log("Game elements initialized successfully");
     return true;
 }
 
 function startGame() {
     console.log("Starting game...");
-
     const startGameBtn = document.getElementById("startGameBtn");
     if (startGameBtn) {
         startGameBtn.disabled = true;
@@ -99,7 +82,6 @@ function startGame() {
                 startGameBtn.disabled = false;
                 startGameBtn.textContent = "Start Game";
             }
-
             if (result && result.success) {
                 startGameWithConfig(result.data);
             } else if (result && result.requiresPayment) {
@@ -124,60 +106,286 @@ function startGameWithConfig(sessionData) {
 
     const startScreen = document.getElementById("start-screen");
     if (startScreen) startScreen.style.display = "none";
-
     const gameContainer = document.querySelector(".game-container");
     if (gameContainer) gameContainer.style.display = "block";
 
-    sessionId = sessionData.config.session_id;
-    gameConfig = sessionData.config;
+    sessionId = sessionData.config.sessionId || sessionData.config.session_id;
 
-    initGame();
-    pendingGameStart = false;
-}
+    // Parse seed from hex string into two u32 halves for WASM
+    const seedHex = sessionData.config.seed || "0000000000000000";
+    gameSeed = seedHex;
+    const seedHigh = parseInt(seedHex.substring(0, 8), 16) >>> 0;
+    const seedLow = parseInt(seedHex.substring(8, 16), 16) >>> 0;
 
-async function fetchGameConfig() {
+    // Get engine config (snake_case JSON from server)
+    const engineConfig = sessionData.config.engineConfig || sessionData.config.engine_config;
+    const configJson = typeof engineConfig === "string" ? engineConfig : JSON.stringify(engineConfig);
+
+    console.log("Creating WASM engine with seed:", seedHex);
+
     try {
-        if (!window.gameAuth || !window.gameAuth.isLoggedIn()) throw new Error("Not logged in");
-
-        const apiBase = window.API_BASE || document.body.getAttribute("data-api-base") || "";
-        let url = `${apiBase}/api/v1/game/config`;
-        if (sessionId) url += `?session_id=${sessionId}`;
-
-        const response = await window.gameAuth.get(url);
-        if (!response.ok) throw new Error(`Error fetching game config: ${response.statusText}`);
-
-        return await response.json();
-    } catch (error) {
-        console.error("Failed to fetch game config:", error);
+        engine = new window.GameEngine(seedHigh, seedLow, configJson);
+        recorder = new window.InputRecorder();
+    } catch (e) {
+        console.error("Failed to create WASM game engine:", e);
+        alert("Failed to initialize game engine.");
+        return;
     }
-}
 
-async function startNewSession() {
-    try {
-        if (!window.gameAuth || !window.gameAuth.isLoggedIn()) throw new Error("Not logged in");
-
-        const apiBase = window.API_BASE || document.body.getAttribute("data-api-base") || "";
-        const response = await window.gameAuth.post(`${apiBase}/api/v1/game/session`);
-
-        if (!response.ok) throw new Error(`Error starting new session: ${response.statusText}`);
-
-        const data = await response.json();
-        if (data.config && data.config.sessionId) {
-            sessionId = data.config.sessionId;
+    if (!canvas || !ctx) {
+        if (!initializeElements()) {
+            console.error("Cannot start game: Canvas element not found");
+            return;
         }
-        return data.config;
-    } catch (error) {
-        console.error("Failed to start new session:", error);
-        return null;
+    }
+
+    gameStartTime = Date.now();
+    frameCounter = 0;
+    lastTimingSample = 0;
+    timingSamples = [];
+    pendingGameStart = false;
+
+    // Start the fixed-timestep game loop
+    if (gameInterval) clearInterval(gameInterval);
+    gameInterval = setInterval(gameTick, FRAME_MS);
+}
+
+function gameTick() {
+    if (!engine) return;
+
+    // Record input and advance engine
+    recorder.record(keys.thrust, keys.left, keys.right, keys.shoot);
+    engine.tick(keys.thrust, keys.left, keys.right, keys.shoot);
+
+    // Sample frame timing every TIMING_SAMPLE_INTERVAL frames
+    frameCounter++;
+    if (frameCounter % TIMING_SAMPLE_INTERVAL === 0) {
+        const now = performance.now();
+        if (lastTimingSample > 0) {
+            // Expected: TIMING_SAMPLE_INTERVAL * FRAME_MS ms (~1000ms)
+            const expected = TIMING_SAMPLE_INTERVAL * FRAME_MS;
+            const delta = now - lastTimingSample;
+            // Offset from expected in microseconds
+            const offsetUs = Math.round((delta - expected) * 1000);
+            timingSamples.push(Math.max(-32768, Math.min(32767, offsetUs)));
+        }
+        lastTimingSample = now;
+    }
+
+    // Get state and render
+    const stateJson = engine.get_state_json();
+    const state = JSON.parse(stateJson);
+
+    render(state);
+
+    // Update HUD
+    if (scoreElement) scoreElement.textContent = state.score;
+    if (levelElement) levelElement.textContent = state.level;
+    if (timeElement) timeElement.textContent = Math.floor((Date.now() - gameStartTime) / 1000);
+    if (livesElement) livesElement.textContent = "♦ ".repeat(state.lives).trim();
+
+    // Draw phase name at top center
+    if (state.phase) {
+        ctx.fillStyle = "#888";
+        ctx.font = "12px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(state.phase, canvas.width / 2, 15);
+        ctx.textAlign = "start";
+    }
+
+    // Draw active power-up indicator
+    if (state.active_power_up) {
+        const ap = state.active_power_up;
+        const colors = { RapidFire: "#ffff00", Shield: "#00ffff", SpreadShot: "#ff00ff", SpeedBoost: "#ff8800" };
+        ctx.fillStyle = colors[ap.power_type] || "#fff";
+        ctx.font = "11px monospace";
+        const label = ap.power_type === "Shield" ? "SHIELD" : `${ap.power_type.toUpperCase()} ${ap.remaining_secs.toFixed(1)}s`;
+        ctx.fillText(label, canvas.width - 150, 15);
+    }
+
+    // Draw time bonus flash
+    if (state.last_time_bonus > 0 && state.frame % 60 < 30) {
+        ctx.fillStyle = "#ffff00";
+        ctx.font = "16px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(`TIME BONUS +${state.last_time_bonus}`, canvas.width / 2, 35);
+        ctx.textAlign = "start";
+    }
+
+    // Draw shield circle around ship if active
+    if (state.active_power_up && state.active_power_up.power_type === "Shield") {
+        ctx.strokeStyle = "#00ffff";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(state.ship.x, state.ship.y, state.ship.radius * 2, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+
+    // Check game over
+    if (state.game_over) {
+        clearInterval(gameInterval);
+        gameInterval = null;
+        handleGameOver(state);
     }
 }
 
-async function submitScore(score, level, gameTime) {
+function render(state) {
+    if (!ctx) return;
+
+    // Clear
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Draw ship
+    const ship = state.ship;
+    ctx.strokeStyle = ship.invulnerable && Math.floor(Date.now() / 100) % 2 === 0 ? "gray" : "white";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+
+    const x1 = ship.x + ship.radius * Math.cos(ship.angle);
+    const y1 = ship.y - ship.radius * Math.sin(ship.angle);
+    const x2 = ship.x - ship.radius * (Math.cos(ship.angle) + Math.sin(ship.angle));
+    const y2 = ship.y + ship.radius * (Math.sin(ship.angle) - Math.cos(ship.angle));
+    const x3 = ship.x - ship.radius * (Math.cos(ship.angle) - Math.sin(ship.angle));
+    const y3 = ship.y + ship.radius * (Math.sin(ship.angle) + Math.cos(ship.angle));
+
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.lineTo(x3, y3);
+    ctx.closePath();
+    ctx.stroke();
+
+    // Draw thrust flame
+    if (ship.thrusting) {
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        const tx1 = ship.x - ship.radius * 1.5 * Math.cos(ship.angle);
+        const ty1 = ship.y + ship.radius * 1.5 * Math.sin(ship.angle);
+        ctx.lineTo(tx1, ty1);
+        ctx.lineTo(x3, y3);
+        ctx.strokeStyle = "orange";
+        ctx.stroke();
+    }
+
+    // Draw bullets
+    ctx.fillStyle = "white";
+    for (const bullet of state.bullets) {
+        ctx.beginPath();
+        ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Draw power-ups
+    for (const pu of (state.power_ups || [])) {
+        const colors = { RapidFire: "#ffff00", Shield: "#00ffff", SpreadShot: "#ff00ff", SpeedBoost: "#ff8800" };
+        ctx.fillStyle = colors[pu.power_type] || "#ffffff";
+        ctx.beginPath();
+        ctx.arc(pu.x, pu.y, pu.radius, 0, Math.PI * 2);
+        ctx.fill();
+        // Pulsing effect
+        ctx.strokeStyle = ctx.fillStyle;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(pu.x, pu.y, pu.radius * 1.5 * (0.8 + 0.2 * Math.sin(Date.now() / 200)), 0, Math.PI * 2);
+        ctx.stroke();
+    }
+
+    // Draw enemies
+    for (const enemy of (state.enemies || [])) {
+        const isBoss = enemy.enemy_type === "Boss";
+        ctx.strokeStyle = enemy.enemy_type === "Drone" ? "#00ff00"
+            : enemy.enemy_type === "Fighter" ? "#ff4444"
+            : isBoss ? "#ff00ff"
+            : "#ffaa00"; // Bomber
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        // Diamond shape for enemies
+        const er = enemy.radius;
+        ctx.moveTo(enemy.x + er * Math.cos(enemy.angle), enemy.y - er * Math.sin(enemy.angle));
+        ctx.lineTo(enemy.x + er * 0.6 * Math.cos(enemy.angle + 1.5), enemy.y - er * 0.6 * Math.sin(enemy.angle + 1.5));
+        ctx.lineTo(enemy.x - er * Math.cos(enemy.angle), enemy.y + er * Math.sin(enemy.angle));
+        ctx.lineTo(enemy.x + er * 0.6 * Math.cos(enemy.angle - 1.5), enemy.y - er * 0.6 * Math.sin(enemy.angle - 1.5));
+        ctx.closePath();
+        ctx.stroke();
+
+        // Boss HP bar
+        if (isBoss) {
+            const barWidth = enemy.radius * 2;
+            const barHeight = 3;
+            const barX = enemy.x - barWidth / 2;
+            const barY = enemy.y - enemy.radius - 8;
+            ctx.fillStyle = "#333";
+            ctx.fillRect(barX, barY, barWidth, barHeight);
+            ctx.fillStyle = "#ff00ff";
+            // We don't know max HP from render state, so show proportionally
+            ctx.fillRect(barX, barY, barWidth * Math.min(enemy.hp / 10, 1), barHeight);
+        }
+    }
+
+    // Draw enemy bullets
+    ctx.fillStyle = "#ff4444";
+    for (const eb of (state.enemy_bullets || [])) {
+        ctx.beginPath();
+        ctx.arc(eb.x, eb.y, eb.radius, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Draw asteroids
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 2;
+    for (const asteroid of state.asteroids) {
+        ctx.beginPath();
+        for (let j = 0; j < asteroid.vertices; j++) {
+            const angle = (j * Math.PI * 2) / asteroid.vertices;
+            const offset = asteroid.offsets[j] || 1;
+            const ax = asteroid.x + asteroid.radius * offset * Math.cos(angle + asteroid.angle);
+            const ay = asteroid.y + asteroid.radius * offset * Math.sin(angle + asteroid.angle);
+            if (j === 0) ctx.moveTo(ax, ay);
+            else ctx.lineTo(ax, ay);
+        }
+        ctx.closePath();
+        ctx.stroke();
+    }
+}
+
+async function handleGameOver(state) {
+    playSound(sounds.explosion);
+
+    if (finalScoreElement) finalScoreElement.textContent = state.score;
+
+    if (window.gameAuth && window.gameAuth.isLoggedIn() && sessionId && recorder) {
+        const gameTime = Math.floor((Date.now() - gameStartTime) / 1000);
+        const inputLog = recorder.finish(); // Uint8Array
+        const frameCount = recorder.frame_count();
+
+        // Compute SHA-256 hash of input log
+        const hashBuffer = await crypto.subtle.digest("SHA-256", inputLog);
+        const inputHash = Array.from(new Uint8Array(hashBuffer))
+            .map((b) => b.toString(16).padStart(2, "0"))
+            .join("");
+
+        // Base64 encode the input log
+        const inputLogBase64 = btoa(String.fromCharCode(...inputLog));
+
+        // Encode frame timings as Int16Array -> base64
+        let frameTimingsB64 = null;
+        if (timingSamples.length > 0) {
+            const timingBuffer = new Int16Array(timingSamples);
+            const timingBytes = new Uint8Array(timingBuffer.buffer);
+            frameTimingsB64 = btoa(String.fromCharCode(...timingBytes));
+        }
+
+        await submitScore(state.score, state.level, gameTime, inputLogBase64, inputHash, frameCount, frameTimingsB64);
+    }
+
+    if (gameOverDialog) gameOverDialog.style.display = "block";
+}
+
+async function submitScore(score, level, gameTime, inputLog, inputHash, frames, frameTimings) {
     if (!window.gameAuth || !window.gameAuth.isLoggedIn() || !sessionId) {
         console.warn("No session ID available, cannot submit score");
         return;
     }
-
     try {
         const apiBase = window.API_BASE || document.body.getAttribute("data-api-base") || "";
         const response = await window.gameAuth.post(`${apiBase}/api/v1/game/score`, {
@@ -185,327 +393,38 @@ async function submitScore(score, level, gameTime) {
             level: level,
             play_time: gameTime,
             session_id: sessionId,
+            input_log: inputLog,
+            input_hash: inputHash,
+            frames: frames,
+            frame_timings: frameTimings,
         });
-
-        if (!response.ok) throw new Error(`Error submitting score: ${response.statusText}`);
-        console.log("Score submitted successfully");
+        if (!response.ok) {
+            const text = await response.text();
+            console.error("Score submission rejected:", text);
+        } else {
+            console.log("Score submitted and verified successfully");
+        }
     } catch (error) {
         console.error("Failed to submit score:", error);
     }
 }
 
-async function initGame() {
-    if (!canvas || !ctx) {
-        if (!initializeElements()) {
-            console.error("Cannot initialize game: Canvas element not found");
-            return;
-        }
-    }
-
-    if (window.gameAuth && window.gameAuth.isLoggedIn()) {
-        const newSessionConfig = await startNewSession();
-        gameConfig = newSessionConfig || (await fetchGameConfig());
-    } else {
-        gameConfig = await fetchGameConfig();
-    }
-
-    if (!gameConfig) {
-        console.error("Cannot start game without config");
-        return;
-    }
-
-    lastConfigUpdate = Date.now();
-
-    gameState.score = 0;
-    gameState.level = 1;
-    gameState.startTime = Date.now();
-    gameState.gameTime = 0;
-
-    ship = {
-        x: canvas.width / 2,
-        y: canvas.height / 2,
-        radius: gameConfig.ship.radius,
-        angle: 0,
-        rotation: 0,
-        thrusting: false,
-        thrust: { x: 0, y: 0 },
-        invulnerable: true,
-        invulnerableTime: Date.now() + gameConfig.ship.invulnerabilityTime,
-        draw: function () {
-            ctx.strokeStyle =
-                this.invulnerable && Math.floor(Date.now() / 100) % 2 === 0 ? "gray" : "white";
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-
-            const x1 = this.x + this.radius * Math.cos(this.angle);
-            const y1 = this.y - this.radius * Math.sin(this.angle);
-            const x2 = this.x - this.radius * (Math.cos(this.angle) + Math.sin(this.angle));
-            const y2 = this.y + this.radius * (Math.sin(this.angle) - Math.cos(this.angle));
-            const x3 = this.x - this.radius * (Math.cos(this.angle) - Math.sin(this.angle));
-            const y3 = this.y + this.radius * (Math.sin(this.angle) + Math.cos(this.angle));
-
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-            ctx.lineTo(x3, y3);
-            ctx.closePath();
-            ctx.stroke();
-
-            if (this.thrusting) {
-                ctx.beginPath();
-                ctx.moveTo(x2, y2);
-                const tx1 = this.x - this.radius * 1.5 * Math.cos(this.angle);
-                const ty1 = this.y + this.radius * 1.5 * Math.sin(this.angle);
-                const tx2 = this.x - this.radius * (Math.cos(this.angle) - Math.sin(this.angle));
-                const ty2 = this.y + this.radius * (Math.sin(this.angle) + Math.cos(this.angle));
-                ctx.lineTo(tx1, ty1);
-                ctx.lineTo(tx2, ty2);
-                ctx.strokeStyle = "orange";
-                ctx.stroke();
-            }
-        },
-    };
-
-    asteroids.length = 0;
-    bullets.length = 0;
-
-    if (scoreElement) scoreElement.textContent = gameState.score;
-    if (levelElement) levelElement.textContent = gameState.level;
-    if (timeElement) timeElement.textContent = gameState.gameTime;
-
-    createAsteroids();
-    requestAnimationFrame(update);
-}
-
-function createAsteroids() {
-    if (!gameConfig || !gameConfig.asteroids) {
-        console.error("Cannot create asteroids - no game config available");
-        return;
-    }
-
-    const count = Math.floor(gameConfig.asteroids.initialCount * Math.sqrt(gameState.level));
-
-    for (let i = 0; i < count; i++) {
-        let x, y;
-        do {
-            x = Math.random() * canvas.width;
-            y = Math.random() * canvas.height;
-        } while (Math.sqrt(Math.pow(ship.x - x, 2) + Math.pow(ship.y - y, 2)) < 100);
-
-        asteroids.push({
-            x: x,
-            y: y,
-            xv: (Math.random() * 2 - 1) * gameConfig.asteroids.speed * (1 + 0.1 * (gameState.level - 1)),
-            yv: (Math.random() * 2 - 1) * gameConfig.asteroids.speed * (1 + 0.1 * (gameState.level - 1)),
-            radius: gameConfig.asteroids.size,
-            angle: Math.random() * Math.PI * 2,
-            vertices: Math.floor(
-                Math.random() * (gameConfig.asteroids.vertices.max - gameConfig.asteroids.vertices.min + 1)
-            ) + gameConfig.asteroids.vertices.min,
-            offsets: Array(gameConfig.asteroids.vertices.max).fill(0).map(() => Math.random() * 0.4 + 0.8),
-        });
-    }
-}
-
-function shootBullet() {
-    if (!gameConfig || bullets.length >= gameConfig.bullets.maxCount) return;
-
-    bullets.push({
-        x: ship.x + ship.radius * Math.cos(ship.angle),
-        y: ship.y - ship.radius * Math.sin(ship.angle),
-        xv: gameConfig.bullets.speed * Math.cos(ship.angle),
-        yv: -gameConfig.bullets.speed * Math.sin(ship.angle),
-        radius: gameConfig.bullets.radius,
-        lifeTime: gameConfig.bullets.lifeTime,
-    });
-
-    playSound(sounds.shoot);
-}
-
-function checkCollisions() {
-    if (ship.invulnerable && Date.now() > ship.invulnerableTime) {
-        ship.invulnerable = false;
-    }
-
-    for (let i = asteroids.length - 1; i >= 0; i--) {
-        for (let j = bullets.length - 1; j >= 0; j--) {
-            const dx = asteroids[i].x - bullets[j].x;
-            const dy = asteroids[i].y - bullets[j].y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-
-            if (distance < asteroids[i].radius + bullets[j].radius) {
-                asteroids.splice(i, 1);
-                bullets.splice(j, 1);
-                playSound(sounds.explosion);
-
-                gameState.score += gameConfig.scoring.pointsPerAsteroid * gameState.level;
-                if (scoreElement) scoreElement.textContent = gameState.score;
-
-                if (asteroids.length === 0) {
-                    gameState.level++;
-                    if (levelElement) levelElement.textContent = gameState.level;
-                    playSound(sounds.levelUp);
-                    createAsteroids();
-                }
-                break;
-            }
-        }
-    }
-
-    if (!ship.invulnerable) {
-        for (let i = 0; i < asteroids.length; i++) {
-            const dx = ship.x - asteroids[i].x;
-            const dy = ship.y - asteroids[i].y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-
-            if (distance < ship.radius + asteroids[i].radius) {
-                gameOver();
-                return;
-            }
-        }
-    }
-}
-
-function update() {
-    if (!canvas || !ctx || !gameConfig) return;
-
-    gameState.gameTime = Math.floor((Date.now() - gameState.startTime) / 1000);
-    if (timeElement) timeElement.textContent = gameState.gameTime;
-
-    if (
-        window.gameAuth &&
-        window.gameAuth.isLoggedIn() &&
-        gameState.gameTime > 0 &&
-        gameState.gameTime % 30 === 0 &&
-        Date.now() - lastConfigUpdate > 5000
-    ) {
-        lastConfigUpdate = Date.now();
-        fetchGameConfig().then((newConfig) => {
-            if (newConfig) gameConfig = newConfig;
-        });
-    }
-
-    ctx.fillStyle = "black";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    ship.angle += ship.rotation;
-
-    if (ship.thrusting) {
-        ship.thrust.x += gameConfig.ship.thrust * Math.cos(ship.angle);
-        ship.thrust.y -= gameConfig.ship.thrust * Math.sin(ship.angle);
-    } else {
-        ship.thrust.x *= 1 - gameConfig.ship.friction;
-        ship.thrust.y *= 1 - gameConfig.ship.friction;
-    }
-
-    ship.x += ship.thrust.x;
-    ship.y += ship.thrust.y;
-
-    if (ship.x < 0) ship.x = canvas.width;
-    if (ship.x > canvas.width) ship.x = 0;
-    if (ship.y < 0) ship.y = canvas.height;
-    if (ship.y > canvas.height) ship.y = 0;
-
-    ship.draw();
-
-    for (let i = bullets.length - 1; i >= 0; i--) {
-        bullets[i].x += bullets[i].xv;
-        bullets[i].y += bullets[i].yv;
-
-        if (bullets[i].x < 0) bullets[i].x = canvas.width;
-        if (bullets[i].x > canvas.width) bullets[i].x = 0;
-        if (bullets[i].y < 0) bullets[i].y = canvas.height;
-        if (bullets[i].y > canvas.height) bullets[i].y = 0;
-
-        bullets[i].lifeTime--;
-        if (bullets[i].lifeTime <= 0) {
-            bullets.splice(i, 1);
-            continue;
-        }
-
-        ctx.fillStyle = "white";
-        ctx.beginPath();
-        ctx.arc(bullets[i].x, bullets[i].y, bullets[i].radius, 0, Math.PI * 2);
-        ctx.fill();
-    }
-
-    for (let i = 0; i < asteroids.length; i++) {
-        asteroids[i].x += asteroids[i].xv;
-        asteroids[i].y += asteroids[i].yv;
-
-        if (asteroids[i].x < -asteroids[i].radius) asteroids[i].x = canvas.width + asteroids[i].radius;
-        if (asteroids[i].x > canvas.width + asteroids[i].radius) asteroids[i].x = -asteroids[i].radius;
-        if (asteroids[i].y < -asteroids[i].radius) asteroids[i].y = canvas.height + asteroids[i].radius;
-        if (asteroids[i].y > canvas.height + asteroids[i].radius) asteroids[i].y = -asteroids[i].radius;
-
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-
-        for (let j = 0; j < asteroids[i].vertices; j++) {
-            const angle = (j * Math.PI * 2) / asteroids[i].vertices;
-            const offset = asteroids[i].offsets[j] || 1;
-            const x = asteroids[i].x + asteroids[i].radius * offset * Math.cos(angle + asteroids[i].angle);
-            const y = asteroids[i].y + asteroids[i].radius * offset * Math.sin(angle + asteroids[i].angle);
-
-            if (j === 0) {
-                ctx.moveTo(x, y);
-            } else {
-                ctx.lineTo(x, y);
-            }
-        }
-
-        ctx.closePath();
-        ctx.stroke();
-    }
-
-    checkCollisions();
-
-    if (!gameOverDialog || !gameOverDialog.style.display || gameOverDialog.style.display === "none") {
-        requestAnimationFrame(update);
-    }
-}
-
-function gameOver() {
-    if (finalScoreElement) finalScoreElement.textContent = gameState.score;
-
-    if (window.gameAuth && window.gameAuth.isLoggedIn()) {
-        submitScore(gameState.score, gameState.level, gameState.gameTime);
-    }
-
-    if (gameOverDialog) gameOverDialog.style.display = "block";
-    playSound(sounds.explosion);
-}
-
 // Keyboard input
 document.addEventListener("keydown", function (event) {
-    if (!gameConfig) return;
-
     switch (event.key) {
-        case "ArrowLeft":
-            ship.rotation = gameConfig.ship.turnSpeed;
-            break;
-        case "ArrowRight":
-            ship.rotation = -gameConfig.ship.turnSpeed;
-            break;
-        case "ArrowUp":
-            ship.thrusting = true;
-            break;
-        case " ":
-            shootBullet();
-            event.preventDefault();
-            break;
+        case "ArrowLeft": keys.left = true; break;
+        case "ArrowRight": keys.right = true; break;
+        case "ArrowUp": keys.thrust = true; break;
+        case " ": keys.shoot = true; event.preventDefault(); break;
     }
 });
 
 document.addEventListener("keyup", function (event) {
     switch (event.key) {
-        case "ArrowLeft":
-        case "ArrowRight":
-            ship.rotation = 0;
-            break;
-        case "ArrowUp":
-            ship.thrusting = false;
-            break;
+        case "ArrowLeft": keys.left = false; break;
+        case "ArrowRight": keys.right = false; break;
+        case "ArrowUp": keys.thrust = false; break;
+        case " ": keys.shoot = false; break;
     }
 });
 
@@ -519,7 +438,9 @@ window.addEventListener("auth:logout", function () {
     console.log("User logged out");
     sessionId = null;
     pendingGameStart = false;
-    gameConfig = null;
+    if (gameInterval) { clearInterval(gameInterval); gameInterval = null; }
+    engine = null;
+    recorder = null;
 });
 
 // Setup start game button
@@ -530,7 +451,7 @@ function setupStartGameButton() {
     }
 }
 
-// Initialize immediately (this script loads dynamically after DOMContentLoaded)
+// Initialize
 if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", function () {
         initializeElements();

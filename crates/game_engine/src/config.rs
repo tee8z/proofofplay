@@ -9,6 +9,33 @@ pub struct GameConfig {
     pub bullets: BulletConfig,
     pub asteroids: AsteroidConfig,
     pub scoring: ScoringConfig,
+    #[serde(default = "LivesConfig::default_lives")]
+    pub lives: LivesConfig,
+    #[serde(default = "EnemyConfig::default_config")]
+    pub enemies: EnemyConfig,
+}
+
+impl LivesConfig {
+    fn default_lives() -> Self {
+        LivesConfig {
+            starting_lives: 3,
+            max_lives: 5,
+        }
+    }
+}
+
+impl EnemyConfig {
+    fn default_config() -> Self {
+        EnemyConfig {
+            drone_start_level: 3,
+            fighter_start_level: 5,
+            bomber_start_level: 7,
+            drone_shoot_cooldown: 120,  // 2 seconds at 60fps
+            fighter_shoot_cooldown: 90, // 1.5 seconds
+            enemy_bullet_speed: Fixed::from(3),
+            enemy_bullet_lifetime: 90, // 1.5 seconds
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -49,6 +76,30 @@ pub struct ScoringConfig {
     pub level_multiplier: Fixed,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LivesConfig {
+    pub starting_lives: u32,
+    pub max_lives: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EnemyConfig {
+    /// Level at which drones start appearing
+    pub drone_start_level: u32,
+    /// Level at which fighters start appearing
+    pub fighter_start_level: u32,
+    /// Level at which bombers start appearing
+    pub bomber_start_level: u32,
+    /// Drone shoot cooldown in frames
+    pub drone_shoot_cooldown: u32,
+    /// Fighter shoot cooldown in frames
+    pub fighter_shoot_cooldown: u32,
+    /// Enemy bullet speed
+    pub enemy_bullet_speed: Fixed,
+    /// Enemy bullet lifetime in frames
+    pub enemy_bullet_lifetime: u32,
+}
+
 impl GameConfig {
     /// Returns a default config matching the original JS game.
     pub fn default_config() -> Self {
@@ -79,6 +130,11 @@ impl GameConfig {
                 points_per_asteroid: 10,
                 level_multiplier: Fixed::ONE,
             },
+            lives: LivesConfig {
+                starting_lives: 3,
+                max_lives: 5,
+            },
+            enemies: EnemyConfig::default_config(),
         }
     }
 }

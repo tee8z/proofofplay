@@ -1,6 +1,6 @@
 // Initialize WASM modules, then load the bundled app JS
 import initNostr, { NostrClientWrapper, SignerType, encryptNsecWithPassword, decryptNsecWithPassword } from '/ui/pkg/nostr_signer/nostr_signer.js';
-import initGameEngine, { GameEngine } from '/ui/pkg/game_engine/game_engine.js';
+import initGameEngine, { GameEngine, InputRecorder } from '/ui/pkg/game_engine/game_engine.js';
 
 async function initApp() {
     console.log('Loading WASM modules...');
@@ -16,6 +16,7 @@ async function initApp() {
     window.NostrClientWrapper = NostrClientWrapper;
     window.SignerType = SignerType;
     window.GameEngine = GameEngine;
+    window.InputRecorder = InputRecorder;
     window.encryptNsecWithPassword = encryptNsecWithPassword;
     window.decryptNsecWithPassword = decryptNsecWithPassword;
 

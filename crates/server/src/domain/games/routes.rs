@@ -1,18 +1,51 @@
 use axum::{
-    extract::{Query, State},
-    http::StatusCode,
+    extract::{ConnectInfo, Query, State},
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use time::OffsetDateTime;
 
+/// Extract the client IP from X-Forwarded-For (leftmost/originating IP),
+/// falling back to the direct connection address.
+fn extract_client_ip(headers: &HeaderMap, addr: SocketAddr) -> String {
+    if let Some(forwarded_for) = headers.get("x-forwarded-for") {
+        if let Ok(value) = forwarded_for.to_str() {
+            if let Some(first_ip) = value.split(',').next() {
+                let trimmed = first_ip.trim();
+                if !trimmed.is_empty() {
+                    return trimmed.to_string();
+                }
+            }
+        }
+    }
+    if let Some(real_ip) = headers.get("x-real-ip") {
+        if let Ok(value) = real_ip.to_str() {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+    }
+    addr.ip().to_string()
+}
+
 use crate::{map_error, nostr_extractor::NostrAuth, startup::AppState};
 
+use super::bot_detection::{
+    analyze_frame_timings, analyze_ip_activity, analyze_server_timing, cross_reference_timings,
+    extract_timing_signals, IpAnalysis,
+};
 use super::store::GameConfigResponse;
+use super::store::ScoreMetadata;
+use super::verify::verify_replay;
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+use sha2::{Digest, Sha256};
 
 #[derive(Debug, Deserialize)]
 pub struct ConfigQuery {
@@ -30,6 +63,10 @@ pub struct ScoreSubmission {
     pub level: i64,
     pub play_time: i64,
     pub session_id: String,
+    pub input_log: String,
+    pub input_hash: String,
+    pub frames: u32,
+    pub frame_timings: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -49,10 +86,13 @@ pub async fn health() -> impl IntoResponse {
 // Create a new game session or get config for existing session
 pub async fn get_game_config(
     auth: NostrAuth,
+    headers: HeaderMap,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Query(query): Query<ConfigQuery>,
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, Response> {
     let pubkey = auth.pubkey.to_string();
+    let client_ip = extract_client_ip(&headers, addr);
     info!("Game config request from pubkey: {}", pubkey);
 
     // Find or create user
@@ -86,7 +126,7 @@ pub async fn get_game_config(
         }
     } else {
         // Create a new session
-        match state.game_store.create_session(user.id).await {
+        match state.game_store.create_session(user.id, &client_ip).await {
             Ok(session) => match state.game_store.create_game_config(&session).await {
                 Ok(config) => Ok((StatusCode::OK, Json(config))),
                 Err(e) => Err(map_error(e)),
@@ -99,10 +139,16 @@ pub async fn get_game_config(
 // Create a new game session
 pub async fn start_new_session(
     auth: NostrAuth,
+    headers: HeaderMap,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, Response> {
     let pubkey = auth.pubkey.to_string();
-    info!("New session request from pubkey: {}", pubkey);
+    let client_ip = extract_client_ip(&headers, addr);
+    info!(
+        "New session request from pubkey: {}, ip: {}",
+        pubkey, client_ip
+    );
 
     // Find user
     let user = match state.user_store.find_by_pubkey(pubkey.clone()).await {
@@ -119,7 +165,7 @@ pub async fn start_new_session(
 
     if has_valid_payment {
         // User has a valid payment, create a new session
-        match state.game_store.create_session(user.id).await {
+        match state.game_store.create_session(user.id, &client_ip).await {
             Ok(session) => match state.game_store.create_game_config(&session).await {
                 Ok(config) => {
                     return Ok((StatusCode::CREATED, Json(NewSessionResponse { config })))
@@ -172,7 +218,7 @@ pub async fn start_new_session(
                 }
 
                 // Create a new session
-                match state.game_store.create_session(user.id).await {
+                match state.game_store.create_session(user.id, &client_ip).await {
                     Ok(session) => match state.game_store.create_game_config(&session).await {
                         Ok(config) => {
                             Ok((StatusCode::CREATED, Json(NewSessionResponse { config })))
@@ -239,11 +285,12 @@ async fn create_and_return_invoice(
     user_id: i64,
     pubkey: &str,
 ) -> Result<(StatusCode, Json<NewSessionResponse>), Response> {
+    let entry_fee = state.settings.competition_settings.entry_fee_sats;
     let description = format!("Asteroids Game Entry Fee - User:{}", pubkey);
 
     let invoice_result = state
         .lightning_provider
-        .create_invoice(500, &description)
+        .create_invoice(entry_fee, &description)
         .await
         .map_err(|e| {
             error!("Failed to create invoice: {}", e);
@@ -291,7 +338,7 @@ async fn create_and_return_invoice(
 
     let payment = state
         .payment_store
-        .create_game_payment(user_id, &invoice_result.payment_id, &invoice_str, 500)
+        .create_game_payment(user_id, &invoice_result.payment_id, &invoice_str, entry_fee)
         .await
         .map_err(map_error)?;
 
@@ -324,63 +371,253 @@ pub async fn submit_score(
         Err(e) => return Err(map_error(e)),
     };
 
-    // Debug log the session ID we're looking for
     info!("Looking for session ID: {}", submission.session_id);
 
     // Verify session
-    match state.game_store.find_session(&submission.session_id).await {
-        Ok(Some(session)) => {
-            if session.user_id != user.id {
-                return Err(
-                    (StatusCode::FORBIDDEN, "Session belongs to a different user").into_response(),
-                );
-            }
+    let session = match state.game_store.find_session(&submission.session_id).await {
+        Ok(Some(session)) => session,
+        Ok(None) => {
+            info!("Session not found: {}", submission.session_id);
+            return Err((StatusCode::NOT_FOUND, "Session not found").into_response());
+        }
+        Err(e) => return Err(map_error(e)),
+    };
 
-            // Submit the score
-            match state
-                .game_store
-                .submit_score(
-                    user.id,
+    if session.user_id != user.id {
+        return Err((StatusCode::FORBIDDEN, "Session belongs to a different user").into_response());
+    }
+
+    // Decode input log from base64
+    let input_bytes = BASE64.decode(&submission.input_log).map_err(|e| {
+        error!("Invalid base64 input_log: {}", e);
+        (StatusCode::BAD_REQUEST, "Invalid input_log encoding").into_response()
+    })?;
+
+    // Verify input hash
+    let computed_hash = hex::encode(Sha256::digest(&input_bytes));
+    if computed_hash != submission.input_hash {
+        error!(
+            "Input hash mismatch: computed={}, submitted={}",
+            computed_hash, submission.input_hash
+        );
+        return Err((StatusCode::BAD_REQUEST, "Input hash mismatch").into_response());
+    }
+
+    // Get seed and engine config from session
+    let seed_hex = session.seed.as_deref().unwrap_or("");
+    let seed = u64::from_str_radix(seed_hex, 16).map_err(|_| {
+        error!("Invalid seed in session: {:?}", session.seed);
+        (StatusCode::INTERNAL_SERVER_ERROR, "Invalid session seed").into_response()
+    })?;
+
+    let engine_config_str = session.engine_config.as_deref().unwrap_or("{}");
+    let engine_config: game_engine::config::GameConfig = serde_json::from_str(engine_config_str)
+        .map_err(|e| {
+            error!("Invalid engine config in session: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Invalid session config").into_response()
+        })?;
+
+    // Replay and verify
+    let result = verify_replay(
+        seed,
+        &engine_config,
+        &input_bytes,
+        submission.frames,
+        submission.score as u32,
+    );
+
+    if !result.verified {
+        error!(
+            "Score verification failed: claimed={}, replayed={}, frames={}/{}",
+            submission.score, result.score, submission.frames, result.frames
+        );
+        return Err((StatusCode::BAD_REQUEST, "Score verification failed").into_response());
+    }
+
+    info!(
+        "Score verified: score={}, level={}, frames={}",
+        result.score, result.level, result.frames
+    );
+
+    // Bot detection checks + signal collection for dashboard
+    let mut bot_flags: Vec<String> = Vec::new();
+    let mut ip_session_count: Option<i64> = None;
+    let mut ip_account_count: Option<i64> = None;
+    let mut server_elapsed: f64 = 0.0;
+    let mut timing_signals = None;
+
+    if state.settings.bot_detection.enabled {
+        // IP-based analysis
+        if let Some(ip) = &session.client_ip {
+            match state.game_store.get_ip_activity(ip).await {
+                Ok((sc, ac)) => {
+                    ip_session_count = Some(sc);
+                    ip_account_count = Some(ac);
+                    let ip_result = analyze_ip_activity(
+                        &IpAnalysis {
+                            session_count: sc,
+                            account_count: ac,
+                        },
+                        &state.settings.bot_detection,
+                    );
+                    if ip_result.reject {
+                        warn!(
+                            "Bot detection rejected score from IP {}: {:?}",
+                            ip, ip_result.flags
+                        );
+                        return Err((StatusCode::FORBIDDEN, "Submission rejected").into_response());
+                    }
+                    bot_flags.extend(ip_result.flags);
+                }
+                Err(e) => warn!("Failed to check IP activity: {}", e),
+            }
+        }
+
+        // Frame timing analysis (client-reported, fakeable)
+        if let Some(ref timings_b64) = submission.frame_timings {
+            if let Ok(timing_bytes) = BASE64.decode(timings_b64) {
+                let timing_result =
+                    analyze_frame_timings(&timing_bytes, &state.settings.bot_detection);
+                bot_flags.extend(timing_result.flags);
+            }
+        }
+
+        // Server-side timing check (unforgeable — uses server timestamps)
+        if let Ok(session_time) = time::OffsetDateTime::parse(
+            &session.start_time,
+            &time::format_description::well_known::Iso8601::DEFAULT,
+        ) {
+            let now = OffsetDateTime::now_utc();
+            server_elapsed = (now.unix_timestamp() - session_time.unix_timestamp()) as f64;
+
+            let timing_result = analyze_server_timing(
+                submission.frames,
+                session_time.unix_timestamp(),
+                now.unix_timestamp(),
+            );
+            if timing_result.reject {
+                warn!(
+                    "Server timing rejected: session={}, frames={}, elapsed={}s, flags={:?}",
+                    submission.session_id, submission.frames, server_elapsed, timing_result.flags
+                );
+                return Err((StatusCode::FORBIDDEN, "Submission rejected").into_response());
+            }
+            bot_flags.extend(timing_result.flags);
+
+            // Cross-reference client timing with server timing (catches faked timing data)
+            if let Some(ref timings_b64) = submission.frame_timings {
+                if let Ok(timing_bytes) = BASE64.decode(timings_b64) {
+                    timing_signals = extract_timing_signals(&timing_bytes);
+
+                    let xref = cross_reference_timings(&timing_bytes, server_elapsed);
+                    if xref.reject {
+                        warn!(
+                            "Timing cross-reference rejected: session={}, flags={:?}",
+                            submission.session_id, xref.flags
+                        );
+                        return Err((StatusCode::FORBIDDEN, "Submission rejected").into_response());
+                    }
+                    bot_flags.extend(xref.flags);
+                }
+            }
+        }
+
+        if !bot_flags.is_empty() {
+            warn!(
+                "Bot flags for session {}: {:?}",
+                submission.session_id, bot_flags
+            );
+        }
+    }
+
+    // Save input log
+    if let Err(e) = state
+        .game_store
+        .save_input_log(&submission.session_id, &input_bytes, &submission.input_hash)
+        .await
+    {
+        warn!("Failed to save input log: {}", e);
+    }
+
+    // Submit the verified score
+    match state
+        .game_store
+        .submit_score(
+            user.id,
+            submission.score,
+            submission.level,
+            submission.play_time,
+        )
+        .await
+    {
+        Ok(score) => {
+            // Publish verified score to audit ledger
+            if let Err(e) = state
+                .ledger_service
+                .publish_score_verified(
+                    &user.nostr_pubkey,
+                    &submission.session_id,
+                    seed_hex,
                     submission.score,
                     submission.level,
-                    submission.play_time,
+                    submission.frames,
+                    &submission.input_hash,
+                    &OffsetDateTime::now_utc().date().to_string(),
                 )
                 .await
             {
-                Ok(score) => {
-                    // Publish verified score to audit ledger
-                    if let Err(e) = state
-                        .ledger_service
-                        .publish_score_verified(
-                            &user.nostr_pubkey,
-                            &submission.session_id,
-                            "", // seed - will be populated when replay verification is implemented
-                            submission.score,
-                            submission.level,
-                            0, // frames - will be populated when replay verification is implemented
-                            "", // input_hash - will be populated when replay verification is implemented
-                            &OffsetDateTime::now_utc().date().to_string(),
-                        )
-                        .await
-                    {
-                        warn!("Failed to publish score verification to ledger: {}", e);
-                    }
-
-                    let response = ScoreResponse {
-                        id: score.id,
-                        score: score.score,
-                        level: score.level,
-                        play_time: score.play_time,
-                        created_at: score.created_at,
-                    };
-                    Ok((StatusCode::CREATED, Json(response)))
-                }
-                Err(e) => Err(map_error(e)),
+                warn!("Failed to publish score verification to ledger: {}", e);
             }
-        }
-        Ok(None) => {
-            info!("Session not found: {}", submission.session_id);
-            Err((StatusCode::NOT_FOUND, "Session not found").into_response())
+
+            // Save score metadata for dashboard
+            let expected_play_secs = submission.frames as f64 / 60.0;
+            let timing_ratio = if expected_play_secs > 0.0 {
+                server_elapsed / expected_play_secs
+            } else {
+                1.0
+            };
+            let xref_ratio = timing_signals.as_ref().map(|ts| {
+                if server_elapsed > 0.0 {
+                    ts.client_claimed_secs / server_elapsed
+                } else {
+                    1.0
+                }
+            });
+
+            let meta = ScoreMetadata {
+                score_id: score.id,
+                session_id: submission.session_id.clone(),
+                user_id: user.id,
+                username: user.username.clone(),
+                client_ip: session.client_ip.clone(),
+                score: submission.score,
+                level: submission.level,
+                frames: submission.frames,
+                play_time: submission.play_time,
+                server_elapsed_secs: server_elapsed,
+                expected_play_secs,
+                server_timing_ratio: timing_ratio,
+                client_claimed_secs: timing_signals.as_ref().map(|ts| ts.client_claimed_secs),
+                timing_cross_ref_ratio: xref_ratio,
+                timing_variance_us2: timing_signals.as_ref().map(|ts| ts.variance_us2),
+                timing_mean_offset_us: timing_signals.as_ref().map(|ts| ts.mean_offset_us),
+                ip_session_count,
+                ip_account_count,
+                flags: bot_flags,
+                rejected: false,
+            };
+            if let Err(e) = state.game_store.save_score_metadata(&meta).await {
+                warn!("Failed to save score metadata: {}", e);
+            }
+
+            let response = ScoreResponse {
+                id: score.id,
+                score: score.score,
+                level: score.level,
+                play_time: score.play_time,
+                created_at: score.created_at,
+            };
+            Ok((StatusCode::CREATED, Json(response)))
         }
         Err(e) => Err(map_error(e)),
     }
@@ -431,4 +668,18 @@ pub async fn get_user_scores(
         }
         Err(e) => Err(map_error(e)),
     }
+}
+
+// Get competition info (completion time, entry fee, prize split) for countdown display
+pub async fn get_competition_info(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let comp = &state.settings.competition_settings;
+    (
+        StatusCode::OK,
+        Json(json!({
+            "start_time": comp.start_time,
+            "end_time": comp.end_time,
+            "entry_fee_sats": comp.entry_fee_sats,
+            "prize_pool_pct": comp.prize_pool_pct,
+        })),
+    )
 }

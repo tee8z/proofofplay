@@ -1,3 +1,4 @@
+pub mod admin;
 mod public_ui;
 mod system;
 mod ui;

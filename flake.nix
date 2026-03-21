@@ -1,5 +1,5 @@
 {
-  description = "Astroid Comp - Competitive game server with Nostr authentication";
+  description = "Proof of Play - Competitive arcade games with Bitcoin Lightning payments";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -61,7 +61,7 @@
 
         # Build workspace dependencies once (for caching)
         workspaceDeps = craneLib.buildDepsOnly ({
-          pname = "astroid-comp-workspace-deps";
+          pname = "proofofplay-workspace-deps";
           version = "0.1.0";
           inherit src;
           buildInputs = commonBuildInputs;
@@ -94,12 +94,12 @@
           nativeBuildInputs = commonNativeBuildInputs;
 
           shellHook = ''
-            export DATABASE_URL="sqlite:data/astroid.db"
+            export DATABASE_URL="sqlite:data/game.db"
             mkdir -p data
 
             echo ""
-            echo "Astroid Comp Development Environment"
-            echo "====================================="
+            echo "Proof of Play Development Environment"
+            echo "======================================="
             echo ""
             echo "Commands:"
             echo "  just build       - Build all crates"

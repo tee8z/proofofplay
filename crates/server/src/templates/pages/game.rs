@@ -21,6 +21,9 @@ pub fn game_content() -> Markup {
 
             div class="game-container nes-container is-dark" style="display: none;" {
                 div class="game-ui nes-container is-rounded is-dark" {
+                    div class="nes-text is-primary" {
+                        "LIVES: " span id="lives" { "♦ ♦ ♦" }
+                    }
                     div class="nes-text is-warning" {
                         "SCORE: " span id="score" { "0" }
                     }
