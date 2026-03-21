@@ -250,9 +250,11 @@ pub fn app(app_state: AppState, serve_dir: ServeDir) -> Router {
         .route("/pubkey", get(get_server_pubkey))
         .route("/summary", get(get_ledger_summary));
 
-    // Serve build.rs output (bundled JS/CSS) from crates/server/static/ directory
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let static_dir = format!("{}/static", manifest_dir);
+    // Serve bundled JS/CSS from the configured static directory
+    let static_dir = std::path::Path::new(&app_state.settings.ui_settings.static_dir)
+        .canonicalize()
+        .unwrap_or_else(|_| std::path::PathBuf::from(&app_state.settings.ui_settings.static_dir));
+    info!("Serving static files from: {:?}", static_dir);
     let static_serve = ServeDir::new(&static_dir);
 
     Router::new()

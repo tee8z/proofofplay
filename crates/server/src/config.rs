@@ -59,10 +59,17 @@ impl Default for DBSettings {
 pub struct UISettings {
     pub remote_url: String,
     pub ui_dir: String,
+    /// Directory containing bundled static assets (JS/CSS).
+    #[serde(default = "default_static_dir")]
+    pub static_dir: String,
     /// Default Nostr relays for NIP-07 extension auth.
     /// Users can override these in the UI.
     #[serde(default = "default_relays")]
     pub default_relays: Vec<String>,
+}
+
+fn default_static_dir() -> String {
+    String::from("./static")
 }
 
 fn default_relays() -> Vec<String> {
@@ -77,6 +84,7 @@ impl Default for UISettings {
         UISettings {
             remote_url: String::from("http://127.0.0.1:8900"),
             ui_dir: String::from("./ui"),
+            static_dir: default_static_dir(),
             default_relays: default_relays(),
         }
     }
