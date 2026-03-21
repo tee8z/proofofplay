@@ -106,7 +106,7 @@ pub async fn build_app(config: Settings) -> Result<(AppState, ServeDir), anyhow:
     create_folder(&config.db_settings.data_folder.clone());
 
     let db_path = format!("{}/game.db", config.db_settings.data_folder);
-    let database_url = format!("sqlite:{}", db_path);
+    let database_url = format!("sqlite:{}?mode=rwc", db_path);
     info!("Connecting to database at {}", database_url);
 
     let db_pool = sqlx::sqlite::SqlitePoolOptions::new()

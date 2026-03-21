@@ -14,6 +14,9 @@ in
 
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
+  # Allow running dynamically linked binaries built on standard Linux (e.g. Ubuntu CI)
+  programs.nix-ld.enable = true;
+
   time.timeZone = "UTC";
 
   # ============================================
