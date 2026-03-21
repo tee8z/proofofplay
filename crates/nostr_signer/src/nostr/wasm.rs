@@ -20,18 +20,20 @@ impl NostrClientWrapper {
         }
     }
 
-    pub(crate) fn get_core(&self) -> &NostrClientCore {
-        &self.inner
-    }
-
+    /// Initialize the signer.
+    ///
+    /// `relays` is an optional JS array of relay URL strings (e.g. `["wss://relay.damus.io"]`).
+    /// Only used for NIP-07 extension signers; ignored for private-key signers.
     #[wasm_bindgen]
     pub async fn initialize(
         &mut self,
         signer_type: SignerType,
         private_key: Option<String>,
+        relays: Option<Vec<String>>,
     ) -> Result<(), JsValue> {
+        let relay_list = relays.unwrap_or_default();
         self.inner
-            .initialize(signer_type, private_key)
+            .initialize(signer_type, private_key, relay_list)
             .await
             .map_err(|e| JsValue::from_str(&e.to_string()))
     }

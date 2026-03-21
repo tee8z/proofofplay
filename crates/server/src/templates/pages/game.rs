@@ -11,8 +11,9 @@ pub fn game_content() -> Markup {
         div id="game-section" {
             div id="start-screen" class="nes-container is-dark" {
                 div class="start-content" {
-                    h1 class="nes-text is-primary" { "ASTEROIDS" }
+                    h1 class="nes-text is-primary" { "Proof of Play" }
                     p class="nes-text is-warning" { "Get ready to play!" }
+                    p id="playsRemainingDisplay" class="nes-text is-success" style="display: none;" {}
                     button class="nes-btn is-primary" id="startGameBtn" {
                         "Start Game"
                     }
@@ -50,6 +51,7 @@ pub fn game_content() -> Markup {
                 div class="dialog-content" {
                     h2 class="nes-text is-error" { "GAME OVER" }
                     p { "Final Score: " span id="final-score" { "0" } }
+                    p id="gameOverPlaysRemaining" class="nes-text is-success" style="display: none;" {}
                     button type="button" id="restart-button" class="nes-btn is-primary" {
                         "Play Again"
                     }

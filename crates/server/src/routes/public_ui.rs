@@ -9,6 +9,7 @@ pub async fn index_handler(State(state): State<Arc<AppState>>) -> Html<String> {
     let config = PageConfig {
         title: "Not Found - Proof of Play",
         api_base: &state.remote_url,
+        default_relays: &state.settings.ui_settings.default_relays,
     };
     let content = maud::html! {
         div class="nes-container is-dark" style="text-align: center; margin-top: 40px;" {

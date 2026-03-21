@@ -4,28 +4,12 @@ pub fn navbar() -> Markup {
     html! {
         div class="nav-bar" {
             div class="nav-bar-left" {
-                a href="/"
-                  class="nes-btn"
-                  hx-get="/"
-                  hx-target="#main-content"
-                  hx-push-url="true" {
-                    "ASTEROIDS"
-                }
                 a href="/leaderboard"
                   class="nes-btn is-primary"
                   hx-get="/leaderboard"
                   hx-target="#main-content"
                   hx-push-url="true" {
                     "Leaderboard"
-                }
-                a href="/play"
-                  class="nes-btn is-success"
-                  id="play-game-nav"
-                  style="display: none;"
-                  hx-get="/play"
-                  hx-target="#main-content"
-                  hx-push-url="true" {
-                    "Play Game"
                 }
             }
 

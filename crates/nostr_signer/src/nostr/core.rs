@@ -22,6 +22,7 @@ impl NostrClientCore {
         &mut self,
         signer_type: SignerType,
         private_key: Option<String>,
+        relays: Vec<String>,
     ) -> Result<(), NostrError> {
         let signer = match signer_type {
             SignerType::PrivateKey => {
@@ -43,12 +44,16 @@ impl NostrClientCore {
 
         let client = Client::new(signer.clone());
 
-        //TODO: make these relays configurable from the client
-        self.add_relay(&client, "wss://relay.damus.io").await?;
-        self.add_relay(&client, "wss://relay.nostr.band").await?;
-        self.add_relay(&client, "wss://relay.primal.net").await?;
+        // Only connect to relays for extension-based signers;
+        // private key auth only needs local crypto operations.
+        #[cfg(target_arch = "wasm32")]
+        if matches!(signer_type, SignerType::NIP07) {
+            for relay_url in &relays {
+                self.add_relay(&client, relay_url).await?;
+            }
+            client.connect().await;
+        }
 
-        client.connect().await;
         self.signer = Some(signer);
         self.inner = Some(client);
 

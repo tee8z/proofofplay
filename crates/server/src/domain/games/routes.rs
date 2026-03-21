@@ -55,6 +55,7 @@ pub struct ConfigQuery {
 #[derive(Debug, Serialize)]
 pub struct NewSessionResponse {
     pub config: GameConfigResponse,
+    pub plays_remaining: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -157,18 +158,29 @@ pub async fn start_new_session(
         Err(e) => return Err(map_error(e)),
     };
 
-    // Check if the user has a valid payment within the last hour
-    let has_valid_payment = match state.payment_store.has_valid_payment(user.id).await {
-        Ok(valid) => valid,
+    // Check if the user has remaining plays from a previous payment
+    let remaining_plays = match state.payment_store.get_remaining_plays(user.id).await {
+        Ok(plays) => plays,
         Err(e) => return Err(map_error(e)),
     };
 
-    if has_valid_payment {
-        // User has a valid payment, create a new session
+    if remaining_plays > 0 {
+        // User has plays remaining, use one and create a new session
         match state.game_store.create_session(user.id, &client_ip).await {
             Ok(session) => match state.game_store.create_game_config(&session).await {
                 Ok(config) => {
-                    return Ok((StatusCode::CREATED, Json(NewSessionResponse { config })))
+                    let plays_remaining = state
+                        .payment_store
+                        .use_one_play(user.id)
+                        .await
+                        .map_err(map_error)?;
+                    return Ok((
+                        StatusCode::CREATED,
+                        Json(NewSessionResponse {
+                            config,
+                            plays_remaining,
+                        }),
+                    ));
                 }
                 Err(e) => return Err(map_error(e)),
             },
@@ -209,6 +221,9 @@ pub async fn start_new_session(
                     pending_payment.payment_id
                 );
 
+                let plays_per_payment =
+                    state.settings.competition_settings.plays_per_payment;
+
                 if let Err(e) = state
                     .payment_store
                     .update_payment_status(&pending_payment.payment_id, "paid")
@@ -217,11 +232,31 @@ pub async fn start_new_session(
                     error!("Failed to update payment status: {}", e);
                 }
 
-                // Create a new session
+                // Grant plays for this payment
+                if let Err(e) = state
+                    .payment_store
+                    .set_plays_remaining(&pending_payment.payment_id, plays_per_payment)
+                    .await
+                {
+                    error!("Failed to set plays_remaining: {}", e);
+                }
+
+                // Create a new session (uses one play)
                 match state.game_store.create_session(user.id, &client_ip).await {
                     Ok(session) => match state.game_store.create_game_config(&session).await {
                         Ok(config) => {
-                            Ok((StatusCode::CREATED, Json(NewSessionResponse { config })))
+                            let plays_remaining = state
+                                .payment_store
+                                .use_one_play(user.id)
+                                .await
+                                .map_err(map_error)?;
+                            Ok((
+                                StatusCode::CREATED,
+                                Json(NewSessionResponse {
+                                    config,
+                                    plays_remaining,
+                                }),
+                            ))
                         }
                         Err(e) => Err(map_error(e)),
                     },
@@ -286,7 +321,7 @@ async fn create_and_return_invoice(
     pubkey: &str,
 ) -> Result<(StatusCode, Json<NewSessionResponse>), Response> {
     let entry_fee = state.settings.competition_settings.entry_fee_sats;
-    let description = format!("Asteroids Game Entry Fee - User:{}", pubkey);
+    let description = format!("Proof of Play Entry Fee - User:{}", pubkey);
 
     let invoice_result = state
         .lightning_provider
@@ -670,6 +705,18 @@ pub async fn get_user_scores(
     }
 }
 
+// Get top replay data for today (for home page replay viewer)
+pub async fn get_top_replays(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, Response> {
+    info!("Get top replays request");
+
+    match state.game_store.get_top_replays(3).await {
+        Ok(replays) => Ok((StatusCode::OK, Json(replays))),
+        Err(e) => Err(map_error(e)),
+    }
+}
+
 // Get competition info (completion time, entry fee, prize split) for countdown display
 pub async fn get_competition_info(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let comp = &state.settings.competition_settings;
@@ -679,6 +726,7 @@ pub async fn get_competition_info(State(state): State<Arc<AppState>>) -> impl In
             "start_time": comp.start_time,
             "end_time": comp.end_time,
             "entry_fee_sats": comp.entry_fee_sats,
+            "plays_per_payment": comp.plays_per_payment,
             "prize_pool_pct": comp.prize_pool_pct,
         })),
     )

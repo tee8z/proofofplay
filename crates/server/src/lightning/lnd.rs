@@ -337,6 +337,40 @@ impl LndClient {
         ))
     }
 
+    // ── Subscribe to Invoice Updates (streaming) ──────────────────────────
+
+    /// Opens a streaming connection to LND's SubscribeInvoices endpoint.
+    /// Returns a response whose body can be read line-by-line for settled invoices.
+    ///
+    /// uri:/lnrpc.Lightning/SubscribeInvoices
+    pub async fn subscribe_invoices(&self) -> Result<reqwest::Response, LightningError> {
+        let url = format!(
+            "{}/v1/invoices/subscribe?settle_only=true",
+            self.base_url
+        );
+
+        info!("LND: subscribing to invoice updates");
+
+        let response = self
+            .client
+            .get(&url)
+            .header("Grpc-Metadata-macaroon", &self.macaroon)
+            .send()
+            .await
+            .map_err(|e| LightningError::ApiError(format!("LND subscribe_invoices failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(LightningError::ApiError(format!(
+                "LND subscribe_invoices failed: {} - {}",
+                status, text
+            )));
+        }
+
+        Ok(response)
+    }
+
     // ── Ping / health check ──────────────────────────────────────────────
 
     pub async fn ping(&self) -> Result<(), LightningError> {

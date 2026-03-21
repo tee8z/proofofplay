@@ -586,9 +586,10 @@ impl GameState {
 
                         // Boss kill grants an extra life
                         if self.enemies[i].enemy_type == EnemyType::Boss
-                            && self.lives < self.config.lives.max_lives {
-                                self.lives += 1;
-                            }
+                            && self.lives < self.config.lives.max_lives
+                        {
+                            self.lives += 1;
+                        }
 
                         // 20% chance to drop a power-up (bosses always drop)
                         let should_drop = self.enemies[i].enemy_type == EnemyType::Boss

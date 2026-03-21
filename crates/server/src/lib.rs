@@ -1,5 +1,6 @@
 mod config;
 mod daily_tasks;
+mod invoice_watcher;
 mod domain;
 mod file_utils;
 mod lightning;
@@ -11,6 +12,7 @@ mod templates;
 
 pub use config::*;
 pub use daily_tasks::*;
+pub use invoice_watcher::*;
 pub use domain::*;
 pub use lightning::*;
 pub use routes::*;

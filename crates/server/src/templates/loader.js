@@ -24,6 +24,10 @@ async function initApp() {
     const apiBase = document.body.getAttribute('data-api-base') || '';
     window.API_BASE = apiBase;
 
+    // Default relays for NIP-07 extension auth (configurable via server config)
+    const relaysAttr = document.body.getAttribute('data-default-relays') || '';
+    window.DEFAULT_RELAYS = relaysAttr ? relaysAttr.split(',').filter(Boolean) : [];
+
     // Load the bundled app JS
     const script = document.createElement('script');
     script.src = '/static/app.min.js';

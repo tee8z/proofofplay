@@ -1,0 +1,1 @@
+ALTER TABLE game_payments ADD COLUMN plays_remaining INTEGER NOT NULL DEFAULT 0;

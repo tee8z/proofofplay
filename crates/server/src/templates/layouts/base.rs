@@ -6,6 +6,7 @@ use crate::templates::layouts::navbar::navbar;
 pub struct PageConfig<'a> {
     pub title: &'a str,
     pub api_base: &'a str,
+    pub default_relays: &'a [String],
 }
 
 pub fn base(config: &PageConfig, content: Markup) -> Markup {
@@ -25,7 +26,7 @@ pub fn base(config: &PageConfig, content: Markup) -> Markup {
                 script type="module" src="https://unpkg.com/bitcoin-qr@1.4.1/dist/bitcoin-qr/bitcoin-qr.esm.js" {}
                 script nomodule src="https://unpkg.com/bitcoin-qr@1.4.1/dist/bitcoin-qr/bitcoin-qr.js" {}
             }
-            body data-api-base=(config.api_base) {
+            body data-api-base=(config.api_base) data-default-relays=(config.default_relays.join(",")) {
                 (navbar())
 
                 div class="container" {

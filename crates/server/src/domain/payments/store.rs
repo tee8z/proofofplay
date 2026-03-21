@@ -13,6 +13,7 @@ pub struct GamePayment {
     pub invoice: String,
     pub amount_sats: i64,
     pub status: String,
+    pub plays_remaining: i64,
     pub created_at: String,
     pub updated_at: String,
     pub paid_at: Option<String>,
@@ -93,6 +94,7 @@ impl PaymentStore {
             invoice: invoice.to_string(),
             amount_sats,
             status: "pending".to_string(),
+            plays_remaining: 0,
             created_at: now.clone(),
             updated_at: now,
             paid_at: None,
@@ -104,7 +106,7 @@ impl PaymentStore {
         let payment = sqlx::query_as!(
             GamePayment,
             r#"
-            SELECT id, user_id, payment_id, invoice, amount_sats, status, created_at, updated_at, paid_at
+            SELECT id, user_id, payment_id, invoice, amount_sats, status, plays_remaining, created_at, updated_at, paid_at
             FROM game_payments
             WHERE payment_id = ?
             "#,
@@ -158,7 +160,7 @@ impl PaymentStore {
         let payment = sqlx::query_as!(
             GamePayment,
             r#"
-            SELECT id, user_id, payment_id, invoice, amount_sats, status, created_at, updated_at, paid_at
+            SELECT id, user_id, payment_id, invoice, amount_sats, status, plays_remaining, created_at, updated_at, paid_at
             FROM game_payments
             WHERE user_id = ? AND status = 'pending'
             ORDER BY created_at DESC
@@ -172,24 +174,70 @@ impl PaymentStore {
         Ok(payment)
     }
 
-    // Check if a user has a valid paid payment in the last hour (to allow multiple game sessions)
-    pub async fn has_valid_payment(&self, user_id: i64) -> Result<bool, Error> {
-        // Get timestamp for one hour ago
-        let one_hour_ago = (OffsetDateTime::now_utc() - time::Duration::hours(1)).to_string();
-
+    /// Check if a user has a paid payment with remaining plays.
+    /// Returns the number of plays remaining, or 0 if none.
+    pub async fn get_remaining_plays(&self, user_id: i64) -> Result<i64, Error> {
         let result = sqlx::query!(
             r#"
-            SELECT COUNT(*) as count
+            SELECT COALESCE(SUM(plays_remaining), 0) as total
             FROM game_payments
-            WHERE user_id = ? AND status = 'paid' AND paid_at > ?
+            WHERE user_id = ? AND status = 'paid' AND plays_remaining > 0
             "#,
             user_id,
-            one_hour_ago
         )
         .fetch_one(&self.db)
         .await?;
 
-        Ok(result.count > 0)
+        Ok(result.total)
+    }
+
+    /// Decrement plays_remaining on the oldest paid payment with plays left.
+    /// Returns the new total remaining plays for this user.
+    pub async fn use_one_play(&self, user_id: i64) -> Result<i64, Error> {
+        let now = OffsetDateTime::now_utc().to_string();
+
+        // Decrement the oldest payment that still has plays
+        sqlx::query!(
+            r#"
+            UPDATE game_payments
+            SET plays_remaining = plays_remaining - 1, updated_at = ?
+            WHERE id = (
+                SELECT id FROM game_payments
+                WHERE user_id = ? AND status = 'paid' AND plays_remaining > 0
+                ORDER BY paid_at ASC
+                LIMIT 1
+            )
+            "#,
+            now,
+            user_id,
+        )
+        .execute(&self.db)
+        .await?;
+
+        self.get_remaining_plays(user_id).await
+    }
+
+    /// Set plays_remaining when a payment is confirmed.
+    pub async fn set_plays_remaining(
+        &self,
+        payment_id: &str,
+        plays: i32,
+    ) -> Result<(), Error> {
+        let now = OffsetDateTime::now_utc().to_string();
+        sqlx::query!(
+            r#"
+            UPDATE game_payments
+            SET plays_remaining = ?, updated_at = ?
+            WHERE payment_id = ?
+            "#,
+            plays,
+            now,
+            payment_id,
+        )
+        .execute(&self.db)
+        .await?;
+
+        Ok(())
     }
 
     // Get the count of paid games for a specific date

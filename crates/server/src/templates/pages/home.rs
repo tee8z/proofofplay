@@ -10,8 +10,17 @@ pub fn home_page(config: &PageConfig, scores: &[ScoreWithUsername]) -> Markup {
 pub fn home_content(scores: &[ScoreWithUsername]) -> Markup {
     html! {
         div id="welcome-screen" class="nes-container is-dark" {
-            h1 class="nes-text is-primary" { "ASTEROIDS" }
-            p class="nes-text" { "Welcome to the classic arcade game!" }
+            h1 class="nes-text is-primary" { "Proof of Play" }
+            p class="nes-text" { "Welcome to Proof of Play!" }
+            p class="nes-text is-success" style="font-size: 0.7em; margin-top: 8px;" {
+                "500 sats = 5 plays. No per-game fees!"
+            }
+
+            // Replay viewer
+            div class="replay-container" style="margin-top: 20px;" {
+                p id="replayLabel" class="nes-text is-primary" style="display: none; font-size: 0.7em; margin-bottom: 8px;" {}
+                canvas id="replayCanvas" width="800" height="600" style="display: none; width: 100%; max-width: 800px; border: 2px solid #333;" {}
+            }
 
             div class="start-leaderboard" {
                 h3 class="nes-text is-primary" { "TODAY'S TOP SCORES" }

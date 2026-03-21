@@ -36,7 +36,8 @@ use nostr_sdk::Keys;
 use crate::{
     check_payment_status, check_prize_eligibility, claim_prize, config::Settings,
     file_utils::create_folder, game_handler, get_competition_info, get_game_config,
-    get_ledger_events, get_ledger_summary, get_server_pubkey, get_top_scores, get_user_scores,
+    get_ledger_events, get_ledger_summary, get_server_pubkey, get_top_replays, get_top_scores,
+    get_user_scores,
     health_check, home_handler, index_handler, leaderboard_handler, leaderboard_rows_handler,
     login, login_username, nav_fragment_handler, register, register_username,
     routes::admin::admin_dashboard, run_daily_tasks, secrets::get_key, start_new_session,
@@ -96,7 +97,11 @@ pub struct AppState {
 
 pub async fn build_app(config: Settings) -> Result<(AppState, ServeDir), anyhow::Error> {
     // The ui folder needs to be generated and have this relative path from where the binary is being run
-    let serve_dir = ServeDir::new(config.ui_settings.ui_dir.clone());
+    let ui_path = std::path::Path::new(&config.ui_settings.ui_dir)
+        .canonicalize()
+        .unwrap_or_else(|_| std::path::PathBuf::from(&config.ui_settings.ui_dir));
+    info!("Serving UI files from: {:?}", ui_path);
+    let serve_dir = ServeDir::new(ui_path);
     info!("Public UI configured");
 
     create_folder(&config.db_settings.data_folder.clone());
@@ -196,9 +201,11 @@ pub async fn build_server(
     info!("Setting up service");
     let app = app(app_state.clone(), serve_dir);
 
-    // Spawn the daily tasks in the background
-    // TODO have this close down with the server gracefully
-    spawn(run_daily_tasks(Arc::new(app_state)));
+    // Spawn background tasks
+    // TODO have these close down with the server gracefully
+    let shared_state = Arc::new(app_state);
+    spawn(run_daily_tasks(shared_state.clone()));
+    spawn(crate::run_invoice_watcher(shared_state.clone()));
 
     let server = axum::serve(
         listener,
@@ -230,7 +237,8 @@ pub fn app(app_state: AppState, serve_dir: ServeDir) -> Router {
         .route("/score", post(submit_score))
         .route("/scores/top", get(get_top_scores))
         .route("/scores/user", get(get_user_scores))
-        .route("/competition", get(get_competition_info));
+        .route("/competition", get(get_competition_info))
+        .route("/replays/top", get(get_top_replays));
 
     let payment_endpoints = Router::new().route("/status/{payment_id}", get(check_payment_status));
 
@@ -254,7 +262,6 @@ pub fn app(app_state: AppState, serve_dir: ServeDir) -> Router {
         .route("/leaderboard", get(leaderboard_handler))
         .route("/fragments/leaderboard-rows", get(leaderboard_rows_handler))
         .route("/fragments/nav", get(nav_fragment_handler))
-        .fallback(index_handler)
         .route("/admin", get(admin_dashboard))
         .route("/api/v1/health_check", get(health_check))
         .nest("/api/v1/users", users_endpoints)
@@ -262,10 +269,11 @@ pub fn app(app_state: AppState, serve_dir: ServeDir) -> Router {
         .nest("/api/v1/payments", payment_endpoints)
         .nest("/api/v1/prizes", prize_endpoints)
         .nest("/api/v1/ledger", ledger_endpoints)
-        .layer(middleware::from_fn(log_request))
-        .with_state(Arc::new(app_state))
         .nest_service("/ui", serve_dir.clone())
         .nest_service("/static", static_serve)
+        .fallback(index_handler)
+        .layer(middleware::from_fn(log_request))
+        .with_state(Arc::new(app_state))
         .layer(cors)
 }
 

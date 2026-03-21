@@ -1,3 +1,4 @@
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use game_engine::config::GameConfig as EngineConfig;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Sqlite};
@@ -5,6 +6,10 @@ use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
 use crate::domain::Error;
+
+fn base64_encode(data: &[u8]) -> String {
+    BASE64.encode(data)
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -51,6 +56,18 @@ pub struct ScoreWithUsername {
     pub level: i64,
     pub play_time: i64,
     pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplayData {
+    pub username: String,
+    pub score: i64,
+    pub level: i64,
+    pub frames: i64,
+    pub seed: String,
+    pub engine_config: String,
+    pub input_log_base64: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -480,6 +497,58 @@ impl GameStore {
         .execute(&self.db)
         .await?;
         Ok(())
+    }
+
+    /// Get top scored games with full replay data for today.
+    /// Returns seed, engine_config, input_log, frames, score, username.
+    pub async fn get_top_replays(&self, limit: i64) -> Result<Vec<ReplayData>, Error> {
+        let today = OffsetDateTime::now_utc().date().to_string();
+        let start = format!("{} 00:00:00", today);
+        let end = format!("{} 23:59:59", today);
+
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                sm.username,
+                sm.score,
+                sm.level,
+                sm.frames,
+                gs.seed,
+                gs.engine_config,
+                gil.input_log
+            FROM score_metadata sm
+            JOIN game_sessions gs ON gs.session_id = sm.session_id
+            JOIN game_input_logs gil ON gil.session_id = sm.session_id
+            WHERE sm.created_at >= ? AND sm.created_at <= ?
+              AND sm.rejected = 0
+              AND gs.seed IS NOT NULL
+              AND gs.engine_config IS NOT NULL
+            ORDER BY sm.score DESC
+            LIMIT ?
+            "#,
+        )
+        .bind(&start)
+        .bind(&end)
+        .bind(limit)
+        .fetch_all(&self.db)
+        .await?;
+
+        let mut replays = Vec::new();
+        for row in rows {
+            use sqlx::Row;
+            let input_log: Vec<u8> = row.try_get("input_log")?;
+            replays.push(ReplayData {
+                username: row.try_get("username")?,
+                score: row.try_get("score")?,
+                level: row.try_get("level")?,
+                frames: row.try_get("frames")?,
+                seed: row.try_get("seed")?,
+                engine_config: row.try_get("engine_config")?,
+                input_log_base64: base64_encode(&input_log),
+            });
+        }
+
+        Ok(replays)
     }
 
     pub async fn save_input_log(

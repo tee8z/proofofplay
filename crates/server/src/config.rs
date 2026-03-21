@@ -59,6 +59,17 @@ impl Default for DBSettings {
 pub struct UISettings {
     pub remote_url: String,
     pub ui_dir: String,
+    /// Default Nostr relays for NIP-07 extension auth.
+    /// Users can override these in the UI.
+    #[serde(default = "default_relays")]
+    pub default_relays: Vec<String>,
+}
+
+fn default_relays() -> Vec<String> {
+    vec![
+        "wss://relay.damus.io".to_string(),
+        "wss://relay.primal.net".to_string(),
+    ]
 }
 
 impl Default for UISettings {
@@ -66,6 +77,7 @@ impl Default for UISettings {
         UISettings {
             remote_url: String::from("http://127.0.0.1:8900"),
             ui_dir: String::from("./ui"),
+            default_relays: default_relays(),
         }
     }
 }
@@ -132,6 +144,9 @@ pub struct CompetitionSettings {
     pub check_interval_secs: u64,
     /// Entry fee in sats
     pub entry_fee_sats: i64,
+    /// Number of game sessions granted per payment
+    #[serde(default = "default_plays_per_payment")]
+    pub plays_per_payment: i32,
     /// Prize pool percentage (0-100) — remainder goes to server
     pub prize_pool_pct: u8,
 }
@@ -154,6 +169,10 @@ impl CompetitionSettings {
     }
 }
 
+fn default_plays_per_payment() -> i32 {
+    5
+}
+
 impl Default for CompetitionSettings {
     fn default() -> Self {
         CompetitionSettings {
@@ -161,6 +180,7 @@ impl Default for CompetitionSettings {
             end_time: "23:59".to_string(),
             check_interval_secs: 3600,
             entry_fee_sats: 500,
+            plays_per_payment: 5,
             prize_pool_pct: 90,
         }
     }

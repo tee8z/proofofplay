@@ -468,5 +468,29 @@ document.body.addEventListener("htmx:afterSwap", function () {
     setupStartGameButton();
 });
 
+// Update plays remaining display
+window.updatePlaysRemaining = function(remaining) {
+    const display = document.getElementById("playsRemainingDisplay");
+    if (display) {
+        if (remaining > 0) {
+            display.textContent = `Plays remaining: ${remaining}`;
+            display.style.display = "block";
+        } else {
+            display.style.display = "none";
+        }
+    }
+    const gameOverDisplay = document.getElementById("gameOverPlaysRemaining");
+    if (gameOverDisplay) {
+        if (remaining > 0) {
+            gameOverDisplay.textContent = `Plays remaining: ${remaining}`;
+            gameOverDisplay.style.display = "block";
+        } else {
+            gameOverDisplay.textContent = "No plays remaining — payment required for next game";
+            gameOverDisplay.style.display = "block";
+            gameOverDisplay.className = "nes-text is-warning";
+        }
+    }
+};
+
 // Export for payment handler callback
 window.startGameWithConfig = startGameWithConfig;

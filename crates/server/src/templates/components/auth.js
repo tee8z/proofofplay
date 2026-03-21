@@ -231,12 +231,22 @@ class AuthClient {
         }
     }
 
+    getRelays() {
+        const loginInput = document.getElementById("relayInput");
+        const registerInput = document.getElementById("relayInputRegister");
+        const input = loginInput?.value?.trim() || registerInput?.value?.trim() || "";
+        if (input) {
+            return input.split(",").map(r => r.trim()).filter(Boolean);
+        }
+        return window.DEFAULT_RELAYS || [];
+    }
+
     async handleExtensionLogin() {
         const errorElement = document.getElementById("extensionLoginError");
         if (errorElement) errorElement.textContent = "";
 
         try {
-            await this.nostrClient.initialize(window.SignerType.NIP07, null);
+            await this.nostrClient.initialize(window.SignerType.NIP07, null, this.getRelays());
             await this.login("extension");
         } catch (error) {
             console.error("Extension login failed:", error);
@@ -255,7 +265,7 @@ class AuthClient {
         if (errorElement) errorElement.textContent = "";
 
         try {
-            await this.nostrClient.initialize(window.SignerType.NIP07, null);
+            await this.nostrClient.initialize(window.SignerType.NIP07, null, this.getRelays());
             await this.register();
             await this.login("extension");
         } catch (error) {
@@ -491,7 +501,7 @@ class AuthClient {
 
         if (this.sessionId && this.username && signerType === "extension") {
             // Re-initialize with extension signer
-            this.nostrClient.initialize(window.SignerType.NIP07, null)
+            this.nostrClient.initialize(window.SignerType.NIP07, null, this.getRelays())
                 .then(() => {
                     this.updateAuthUI();
                     window.dispatchEvent(

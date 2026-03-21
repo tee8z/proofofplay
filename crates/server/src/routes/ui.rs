@@ -18,8 +18,9 @@ pub async fn home_handler(headers: HeaderMap, State(state): State<Arc<AppState>>
             vec![]
         });
     let config = PageConfig {
-        title: "ASTEROIDS",
+        title: "Proof of Play",
         api_base: &state.remote_url,
+        default_relays: &state.settings.ui_settings.default_relays,
     };
 
     if headers.contains_key("hx-request") {
@@ -32,8 +33,9 @@ pub async fn home_handler(headers: HeaderMap, State(state): State<Arc<AppState>>
 /// Game page handler
 pub async fn game_handler(headers: HeaderMap, State(state): State<Arc<AppState>>) -> Html<String> {
     let config = PageConfig {
-        title: "ASTEROIDS - Play",
+        title: "Play",
         api_base: &state.remote_url,
+        default_relays: &state.settings.ui_settings.default_relays,
     };
 
     if headers.contains_key("hx-request") {
@@ -57,8 +59,9 @@ pub async fn leaderboard_handler(
             vec![]
         });
     let config = PageConfig {
-        title: "ASTEROIDS - Leaderboard",
+        title: "Leaderboard",
         api_base: &state.remote_url,
+        default_relays: &state.settings.ui_settings.default_relays,
     };
 
     if headers.contains_key("hx-request") {

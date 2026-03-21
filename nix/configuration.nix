@@ -94,7 +94,6 @@ in
 
   services.caddy = {
     enable = true;
-    # Replace YOUR_DOMAIN with actual domain
     # Caddy auto-provisions Let's Encrypt certs
     virtualHosts."proofofplay.win" = {
       extraConfig = ''

@@ -29,7 +29,15 @@ pub fn auth_modals() -> Markup {
 
                 div id="extensionLogin" class="tab-content" {
                     p { "Login using your Nostr browser extension." }
-                    button id="extensionLoginButton" class="nes-btn is-primary" {
+                    div class="nes-field" style="margin-top: 10px;" {
+                        label for="relayInput" { "Relays (comma-separated):" }
+                        input type="text" id="relayInput" class="nes-input"
+                            placeholder="wss://relay.damus.io, wss://relay.primal.net";
+                        p class="nes-text" style="font-size: 0.6em; margin-top: 4px;" {
+                            "Leave blank to use defaults"
+                        }
+                    }
+                    button id="extensionLoginButton" class="nes-btn is-primary" style="margin-top: 10px;" {
                         "Connect with Extension"
                     }
                     p id="extensionLoginError" class="help-text" {}
@@ -113,7 +121,15 @@ pub fn auth_modals() -> Markup {
 
                 div id="registerExtension" class="tab-content" {
                     p { "Register using your Nostr browser extension." }
-                    button id="extensionRegisterButton" class="nes-btn is-success" {
+                    div class="nes-field" style="margin-top: 10px;" {
+                        label for="relayInputRegister" { "Relays (comma-separated):" }
+                        input type="text" id="relayInputRegister" class="nes-input"
+                            placeholder="wss://relay.damus.io, wss://relay.primal.net";
+                        p class="nes-text" style="font-size: 0.6em; margin-top: 4px;" {
+                            "Leave blank to use defaults"
+                        }
+                    }
+                    button id="extensionRegisterButton" class="nes-btn is-success" style="margin-top: 10px;" {
                         "Register with Extension"
                     }
                     p id="extensionRegisterError" class="help-text" {}

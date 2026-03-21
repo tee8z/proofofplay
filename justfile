@@ -85,8 +85,8 @@ check: fmt-check clippy test
 # Run Commands
 # ============================================
 
-# Run the server
-run *ARGS:
+# Run the server (builds WASM modules first)
+run *ARGS: build-wasm
     RUST_LOG=info cargo run --bin server -- {{ARGS}}
 
 # Run with debug logging

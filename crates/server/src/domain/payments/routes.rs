@@ -72,6 +72,20 @@ pub async fn check_payment_status(
                     error!("Failed to update payment status: {}", e);
                 }
 
+                // Grant plays if not already granted (idempotent — invoice
+                // watcher may have already done this)
+                if payment.plays_remaining == 0 {
+                    let plays_per_payment =
+                        state.settings.competition_settings.plays_per_payment;
+                    if let Err(e) = state
+                        .payment_store
+                        .set_plays_remaining(&payment_id, plays_per_payment)
+                        .await
+                    {
+                        error!("Failed to set plays_remaining: {}", e);
+                    }
+                }
+
                 if let Err(e) = state
                     .ledger_service
                     .publish_game_entry(

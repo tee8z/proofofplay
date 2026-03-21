@@ -57,6 +57,9 @@ class PaymentHandler {
             if (response.status === 201 || response.status === 200) {
                 console.log("Game session created successfully");
                 const data = await response.json();
+                if (data.plays_remaining !== undefined) {
+                    window.updatePlaysRemaining(data.plays_remaining);
+                }
                 return { success: true, data };
             } else if (response.status === 402) {
                 console.log("Payment required to start game");
@@ -96,7 +99,8 @@ class PaymentHandler {
         if (this.qrContainer) this.qrContainer.appendChild(qrElement);
 
         if (this.paymentStatus) {
-            this.paymentStatus.innerHTML = '<p>Waiting for payment...</p><p class="nes-text is-primary">Amount: 500 sats</p>';
+            const amount = paymentData.amount_sats || 500;
+            this.paymentStatus.innerHTML = `<p>Waiting for payment...</p><p class="nes-text is-primary">Amount: ${amount} sats</p><p class="nes-text is-success">You'll get 5 plays!</p>`;
         }
 
         if (this.paymentModal) this.paymentModal.style.display = "block";
@@ -158,7 +162,8 @@ class PaymentHandler {
                 this.handleFailedPayment();
             } else {
                 if (this.paymentStatus) {
-                    this.paymentStatus.innerHTML = '<p>Waiting for payment...</p><p class="nes-text is-primary">Amount: 500 sats</p>';
+                    const amount = this.paymentData?.amount_sats || 500;
+                    this.paymentStatus.innerHTML = `<p>Waiting for payment...</p><p class="nes-text is-primary">Amount: ${amount} sats</p><p class="nes-text is-success">You'll get 5 plays!</p>`;
                 }
             }
         } catch (error) {

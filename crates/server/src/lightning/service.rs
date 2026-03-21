@@ -55,7 +55,7 @@ impl LightningService {
             "currency": "btc",
             "amount_msats": amount_msats,
             "payment_kind": "bolt11",
-            "description": description.unwrap_or("Asteroids Game Entry Fee")
+            "description": description.unwrap_or("Proof of Play Entry Fee")
         });
 
         let url = format!(
