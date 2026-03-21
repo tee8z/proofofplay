@@ -22,7 +22,7 @@ impl NostrClientCore {
         &mut self,
         signer_type: SignerType,
         private_key: Option<String>,
-        relays: Vec<String>,
+        _relays: Vec<String>,
     ) -> Result<(), NostrError> {
         let signer = match signer_type {
             SignerType::PrivateKey => {
@@ -48,7 +48,7 @@ impl NostrClientCore {
         // private key auth only needs local crypto operations.
         #[cfg(target_arch = "wasm32")]
         if matches!(signer_type, SignerType::NIP07) {
-            for relay_url in &relays {
+            for relay_url in &_relays {
                 self.add_relay(&client, relay_url).await?;
             }
             client.connect().await;
