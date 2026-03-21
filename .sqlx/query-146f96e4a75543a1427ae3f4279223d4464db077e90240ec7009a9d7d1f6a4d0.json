@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT COALESCE(MAX(score), 0) as high_score\n            FROM scores\n            WHERE user_id = ?\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "high_score",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "146f96e4a75543a1427ae3f4279223d4464db077e90240ec7009a9d7d1f6a4d0"
+}

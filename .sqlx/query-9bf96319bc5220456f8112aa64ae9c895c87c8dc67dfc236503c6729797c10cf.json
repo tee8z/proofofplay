@@ -1,0 +1,74 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT id, nostr_pubkey, username, password_hash, encrypted_nsec, lightning_address, banned, ban_reason, created_at, updated_at\n            FROM users\n            WHERE username = ? AND password_hash IS NOT NULL\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "nostr_pubkey",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "username",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "password_hash",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "encrypted_nsec",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "lightning_address",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "banned",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "ban_reason",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 9,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "9bf96319bc5220456f8112aa64ae9c895c87c8dc67dfc236503c6729797c10cf"
+}

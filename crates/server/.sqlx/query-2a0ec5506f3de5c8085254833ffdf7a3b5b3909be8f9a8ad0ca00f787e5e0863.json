@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT\n                COUNT(*) as total_games,\n                COALESCE(SUM(amount_sats), 0) as total_spent\n            FROM game_payments\n            WHERE user_id = ? AND status = 'paid'\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "total_games",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "total_spent",
+        "ordinal": 1,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "2a0ec5506f3de5c8085254833ffdf7a3b5b3909be8f9a8ad0ca00f787e5e0863"
+}

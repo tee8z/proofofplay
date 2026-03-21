@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO banned_ips (ip, reason, banned_by) VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "0d9f090e29d8678582e682b2881acb230b49734937f95a2bd2325f8be3f44b83"
+}

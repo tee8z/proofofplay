@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n            SELECT s.id, s.user_id, s.score, s.level, s.play_time, s.created_at, u.username\n            FROM scores s\n            JOIN users u ON s.user_id = u.id\n            ORDER BY s.score DESC\n            LIMIT ?\n            ",
+  "query": "\n            SELECT s.id, s.user_id, s.score, s.level, s.play_time, s.created_at, u.username, u.banned\n            FROM scores s\n            JOIN users u ON s.user_id = u.id\n            ORDER BY s.score DESC\n            LIMIT ?\n            ",
   "describe": {
     "columns": [
       {
@@ -37,6 +37,11 @@
         "name": "username",
         "ordinal": 6,
         "type_info": "Text"
+      },
+      {
+        "name": "banned",
+        "ordinal": 7,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
@@ -49,8 +54,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "976e8fc1a2e09b61bac3aee4a352d27fc422361bb6c22b1dd6a46e6b5385dfc4"
+  "hash": "ef566f29ed73c118e81a53b3ca1cea56a086d395392738768fdafb743335998d"
 }

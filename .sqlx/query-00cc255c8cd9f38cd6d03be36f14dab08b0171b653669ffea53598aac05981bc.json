@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM banned_ips WHERE ip = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "00cc255c8cd9f38cd6d03be36f14dab08b0171b653669ffea53598aac05981bc"
+}

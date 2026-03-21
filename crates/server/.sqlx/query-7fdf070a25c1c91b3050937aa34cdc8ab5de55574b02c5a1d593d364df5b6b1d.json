@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n            SELECT id, nostr_pubkey, username, password_hash, encrypted_nsec, created_at, updated_at\n            FROM users\n            WHERE nostr_pubkey = ?\n            ",
+  "query": "\n            SELECT id, nostr_pubkey, username, password_hash, encrypted_nsec, lightning_address, banned, ban_reason, created_at, updated_at\n            FROM users\n            WHERE id = ?\n            ",
   "describe": {
     "columns": [
       {
@@ -29,13 +29,28 @@
         "type_info": "Text"
       },
       {
-        "name": "created_at",
+        "name": "lightning_address",
         "ordinal": 5,
         "type_info": "Text"
       },
       {
-        "name": "updated_at",
+        "name": "banned",
         "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "ban_reason",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 9,
         "type_info": "Text"
       }
     ],
@@ -48,9 +63,12 @@
       false,
       true,
       true,
+      true,
+      false,
+      true,
       false,
       false
     ]
   },
-  "hash": "9f2b3b39e01d562a60078e4610ff1433dd42b9b591aee81a5eb6a1d6e2331f9e"
+  "hash": "7fdf070a25c1c91b3050937aa34cdc8ab5de55574b02c5a1d593d364df5b6b1d"
 }

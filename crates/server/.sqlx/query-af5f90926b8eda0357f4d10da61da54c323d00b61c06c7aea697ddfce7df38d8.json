@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT\n                COUNT(*) as prizes_won,\n                COALESCE(SUM(amount_sats), 0) as total_earned\n            FROM prize_payouts\n            WHERE user_id = ? AND status = 'paid'\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "prizes_won",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "total_earned",
+        "ordinal": 1,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "af5f90926b8eda0357f4d10da61da54c323d00b61c06c7aea697ddfce7df38d8"
+}
