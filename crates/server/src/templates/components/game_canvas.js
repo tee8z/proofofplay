@@ -428,6 +428,38 @@ document.addEventListener("keyup", function (event) {
     }
 });
 
+// Touch input
+function setupTouchControls() {
+    const buttons = [
+        { id: "touchLeft", key: "left" },
+        { id: "touchRight", key: "right" },
+        { id: "touchThrust", key: "thrust" },
+        { id: "touchFire", key: "shoot" },
+    ];
+
+    for (const { id, key } of buttons) {
+        const btn = document.getElementById(id);
+        if (!btn) continue;
+
+        btn.addEventListener("touchstart", function (e) {
+            e.preventDefault();
+            keys[key] = true;
+            btn.classList.add("active");
+        }, { passive: false });
+
+        btn.addEventListener("touchend", function (e) {
+            e.preventDefault();
+            keys[key] = false;
+            btn.classList.remove("active");
+        }, { passive: false });
+
+        btn.addEventListener("touchcancel", function () {
+            keys[key] = false;
+            btn.classList.remove("active");
+        });
+    }
+}
+
 // Auth event listeners
 window.addEventListener("auth:login", function (event) {
     console.log("Authentication successful", event.detail);
@@ -456,6 +488,7 @@ if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", function () {
         initializeElements();
         setupStartGameButton();
+        setupTouchControls();
     });
 } else {
     initializeElements();

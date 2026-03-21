@@ -303,6 +303,67 @@ canvas {
     }
 }
 
+/* Touch controls — below canvas, hidden by default, shown on touch devices */
+.touch-controls {
+    display: none;
+    padding: 12px 8px;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.touch-controls .touch-btn {
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: manipulation;
+    border: 3px solid rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.7);
+    font-family: "Press Start 2P", cursive;
+    font-size: 18px;
+    width: 72px;
+    height: 72px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.touch-controls .touch-btn:active,
+.touch-controls .touch-btn.active {
+    background: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.8);
+    color: #fff;
+}
+
+.touch-dpad {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.touch-dpad-row {
+    display: flex;
+    gap: 8px;
+}
+
+.touch-fire {
+    width: 96px !important;
+    height: 96px !important;
+    border-radius: 50% !important;
+    font-size: 13px !important;
+    border-color: rgba(255, 80, 80, 0.6) !important;
+    color: rgba(255, 80, 80, 0.8) !important;
+}
+
+.touch-fire:active,
+.touch-fire.active {
+    background: rgba(255, 80, 80, 0.3) !important;
+    border-color: rgba(255, 80, 80, 0.9) !important;
+    color: #ff5050 !important;
+}
+
 /* Responsive */
 @media (max-width: 840px) {
     #welcome-screen,
@@ -315,6 +376,17 @@ canvas {
     canvas {
         max-width: 100%;
         height: auto;
+    }
+}
+
+/* Show touch controls and hide keyboard hint on touch devices */
+@media (pointer: coarse) {
+    .touch-controls {
+        display: flex;
+    }
+
+    #keyboardControls {
+        display: none;
     }
 }
 

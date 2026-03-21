@@ -38,7 +38,19 @@ pub fn game_content() -> Markup {
 
                 canvas id="gameCanvas" width="800" height="600" {}
 
-                div class="controls nes-container is-rounded" {
+                // Touch controls — below canvas, visible only on touch devices
+                div class="touch-controls" id="touchControls" {
+                    div class="touch-dpad" {
+                        button class="touch-btn touch-thrust" id="touchThrust" { "▲" }
+                        div class="touch-dpad-row" {
+                            button class="touch-btn touch-rotate-left" id="touchLeft" { "◄" }
+                            button class="touch-btn touch-rotate-right" id="touchRight" { "►" }
+                        }
+                    }
+                    button class="touch-btn touch-fire" id="touchFire" { "FIRE" }
+                }
+
+                div class="controls nes-container is-rounded" id="keyboardControls" {
                     p class="nes-text is-primary" { "CONTROLS:" }
                     ul class="nes-list is-disc" {
                         li { "ARROWS: Move ship" }
