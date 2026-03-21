@@ -28,7 +28,16 @@ pub async fn home_handler(headers: HeaderMap, State(state): State<Arc<AppState>>
     };
 
     if headers.contains_key("hx-request") {
-        Html(pages::home::home_content(config.entry_fee_sats, config.plays_per_payment, config.plays_ttl_minutes, config.prize_pool_pct, &scores).into_string())
+        Html(
+            pages::home::home_content(
+                config.entry_fee_sats,
+                config.plays_per_payment,
+                config.plays_ttl_minutes,
+                config.prize_pool_pct,
+                &scores,
+            )
+            .into_string(),
+        )
     } else {
         Html(pages::home::home_page(&config, &scores).into_string())
     }
@@ -47,7 +56,15 @@ pub async fn game_handler(headers: HeaderMap, State(state): State<Arc<AppState>>
     };
 
     if headers.contains_key("hx-request") {
-        Html(pages::game::game_content(config.entry_fee_sats, config.plays_per_payment, config.plays_ttl_minutes, config.prize_pool_pct).into_string())
+        Html(
+            pages::game::game_content(
+                config.entry_fee_sats,
+                config.plays_per_payment,
+                config.plays_ttl_minutes,
+                config.prize_pool_pct,
+            )
+            .into_string(),
+        )
     } else {
         Html(pages::game::game_page(&config).into_string())
     }
@@ -88,7 +105,10 @@ pub async fn leaderboard_handler(
     };
 
     if headers.contains_key("hx-request") {
-        Html(pages::leaderboard::leaderboard_content(prize_pool_sats, comp.prize_pool_pct, &scores).into_string())
+        Html(
+            pages::leaderboard::leaderboard_content(prize_pool_sats, comp.prize_pool_pct, &scores)
+                .into_string(),
+        )
     } else {
         Html(pages::leaderboard::leaderboard_page(&config, prize_pool_sats, &scores).into_string())
     }

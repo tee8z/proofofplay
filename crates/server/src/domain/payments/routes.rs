@@ -174,7 +174,7 @@ pub struct ClaimPrizeRequest {
     pub date: String,
 }
 
-// Return info about prize eligibility for the most recently completed competition.
+// Return all pending (unclaimed) prizes for this user.
 pub async fn check_prize_eligibility(
     auth: NostrAuth,
     State(state): State<Arc<AppState>>,
@@ -188,139 +188,83 @@ pub async fn check_prize_eligibility(
         Err(e) => return Err(map_error(e)),
     };
 
-    // The target date is today — the competition window that just closed.
-    let target_date = OffsetDateTime::now_utc().date().to_string();
-
-    // Check if user was the top scorer
-    let was_top_scorer = match state
-        .payment_store
-        .check_top_scorer(user.id, &target_date)
-        .await
-    {
-        Ok(is_top) => is_top,
+    // Get all claimable prizes (pending + failed) for this user
+    let pending = match state.payment_store.get_claimable_prizes(user.id).await {
+        Ok(p) => p,
         Err(e) => {
-            error!("Failed to check top scorer: {}", e);
+            error!("Failed to get pending prizes: {}", e);
             return Err(map_error(e));
         }
     };
 
-    if !was_top_scorer {
+    if pending.is_empty() {
         return Ok((
             StatusCode::OK,
             Json(json!({
-                "eligible": false,
-                "message": "You were not the top scorer for this competition"
+                "pending_prizes": [],
+                "message": "No prizes to claim"
             })),
         ));
     }
 
-    // Check if prize was already claimed
-    let already_claimed = match state
-        .payment_store
-        .check_prize_claimed(user.id, &target_date)
-        .await
-    {
-        Ok(claimed) => claimed,
-        Err(e) => {
-            error!("Failed to check if prize was claimed: {}", e);
-            return Err(map_error(e));
-        }
-    };
-
-    if already_claimed {
-        let prize = match state
-            .payment_store
-            .get_pending_prize_for_user(user.id, &target_date)
-            .await
-        {
-            Ok(Some(prize)) => prize,
-            Ok(None) => {
-                return Ok((
-                    StatusCode::OK,
-                    Json(json!({
-                        "eligible": false,
-                        "message": "Your prize has already been processed"
-                    })),
-                ));
-            }
-            Err(e) => {
-                error!("Failed to get pending prize: {}", e);
-                return Err(map_error(e));
-            }
-        };
-
-        if prize.status == "paid" {
-            return Ok((
-                StatusCode::OK,
-                Json(json!({
-                    "eligible": false,
-                    "message": "Your prize has already been paid"
-                })),
-            ));
-        } else {
-            return Ok((
-                StatusCode::OK,
-                Json(json!({
-                    "eligible": true,
-                    "date": target_date,
-                    "amount": prize.amount_sats,
-                    "message": "You can claim your prize by submitting a Lightning invoice",
-                    "status": "pending",
-                    "has_payment_request": prize.payment_request.is_some()
-                })),
-            ));
-        }
-    }
-
-    // Calculate prize amount
-    let total_games = match state.payment_store.count_games_for_date(&target_date).await {
-        Ok(count) => count,
-        Err(e) => {
-            error!("Failed to count games: {}", e);
-            return Err(map_error(e));
-        }
-    };
-
-    let comp = &state.settings.competition_settings;
-    let prize_per_game = comp.entry_fee_sats * (comp.prize_pool_pct as i64) / 100;
-    let prize_amount = total_games * prize_per_game;
-
-    if prize_amount <= 0 {
-        return Ok((
-            StatusCode::OK,
-            Json(json!({
-                "eligible": false,
-                "message": "No prize pool available for this competition"
-            })),
-        ));
-    }
-
-    // Record the winner if not already recorded
-    match state
-        .payment_store
-        .record_daily_winner(
-            user.id,
-            &target_date,
-            0,
-            prize_amount,
-        )
-        .await
-    {
-        Ok(_) => (),
-        Err(e) => {
-            error!("Failed to record winner: {}", e);
-        }
-    };
+    let prizes: Vec<serde_json::Value> = pending
+        .iter()
+        .map(|p| {
+            json!({
+                "date": p.date,
+                "amount": p.amount_sats,
+                "score": p.score,
+                "status": p.status,
+            })
+        })
+        .collect();
 
     Ok((
         StatusCode::OK,
         Json(json!({
-            "eligible": true,
-            "date": target_date,
-            "amount": prize_amount,
-            "message": "You can claim your prize by submitting a Lightning invoice"
+            "pending_prizes": prizes,
+            "message": format!("You have {} unclaimed prize(s)", prizes.len())
         })),
     ))
+}
+
+/// Parse the amount from a bolt11 invoice's human-readable part.
+/// Returns Some(sats) for invoices with an amount, None for zero-amount invoices.
+///
+/// Format: ln{bc,bcrt,tb,tbs}<amount><multiplier>1<data>
+/// Multipliers: m=milli(0.001), u=micro(0.000001), n=nano, p=pico
+fn parse_bolt11_amount(invoice: &str) -> Option<i64> {
+    let lower = invoice.to_lowercase();
+
+    // Strip the network prefix to get amount+multiplier+1+data
+    let after_prefix = ["lnbcrt", "lntbs", "lnbc", "lntb"]
+        .iter()
+        .find_map(|prefix| lower.strip_prefix(prefix))?;
+
+    // Find the "1" separator — the amount is everything before it
+    let sep_pos = after_prefix.find('1')?;
+    let amount_str = &after_prefix[..sep_pos];
+
+    if amount_str.is_empty() {
+        return None;
+    }
+
+    // Split into numeric part and multiplier suffix
+    let (num_str, multiplier) = if let Some(n) = amount_str.strip_suffix('m') {
+        (n, 100_000_000_i64) // mBTC → msats factor
+    } else if let Some(n) = amount_str.strip_suffix('u') {
+        (n, 100_000)
+    } else if let Some(n) = amount_str.strip_suffix('n') {
+        (n, 100)
+    } else if let Some(n) = amount_str.strip_suffix('p') {
+        let val: i64 = n.parse().ok()?;
+        return Some(val / 100); // pico-BTC: 1p = 0.01 sat
+    } else {
+        (amount_str, 100_000_000_000) // BTC → msats
+    };
+
+    let n: i64 = num_str.parse().ok()?;
+    Some(n * multiplier / 1_000)
 }
 
 // Claim a prize — manual fallback when auto-payout didn't happen.
@@ -365,28 +309,83 @@ pub async fn claim_prize(
             .into_response());
     }
 
-    // Get the pending prize record
+    // Get a claimable prize (pending or failed)
     let prize = match state
         .payment_store
-        .get_pending_prize_for_user(user.id, &request.date)
+        .get_claimable_prize(user.id, &request.date)
         .await
     {
         Ok(Some(p)) => p,
         Ok(None) => {
             return Err((
                 StatusCode::NOT_FOUND,
-                "No eligible prize found for this date (may already be paid)",
+                "No claimable prize found for this date (may already be paid or in-flight)",
             )
                 .into_response());
         }
         Err(e) => {
-            error!("Failed to get pending prize: {}", e);
+            error!("Failed to get claimable prize: {}", e);
             return Err(map_error(e));
         }
     };
 
-    if prize.status == "paid" {
-        return Err((StatusCode::FORBIDDEN, "Prize has already been paid").into_response());
+    // If this is a retry of a failed prize, verify the previous attempt
+    // didn't actually succeed or is still in-flight on our node.
+    if prize.status == "failed" {
+        if let Some(ref prev_payment_id) = prize.payment_id {
+            info!(
+                "Prize {} has a previous payment attempt ({}), checking with node...",
+                prize.id, prev_payment_id
+            );
+            match state
+                .lightning_provider
+                .check_outbound_payment(prev_payment_id)
+                .await
+            {
+                Ok(status) => match status.as_str() {
+                    "SUCCEEDED" => {
+                        // Payment actually landed — update status and return
+                        info!("Previous payment {} actually succeeded!", prev_payment_id);
+                        if let Err(e) = state
+                            .payment_store
+                            .update_prize_status(prize.id, "paid", Some(prev_payment_id))
+                            .await
+                        {
+                            error!("Failed to update prize status: {}", e);
+                        }
+                        return Ok((
+                            StatusCode::OK,
+                            Json(json!({
+                                "success": true,
+                                "message": "Prize was already paid (previous attempt succeeded)",
+                                "payment_id": prev_payment_id,
+                                "amount": prize.amount_sats
+                            })),
+                        ));
+                    }
+                    "IN_FLIGHT" => {
+                        return Err((
+                            StatusCode::CONFLICT,
+                            "Previous payment attempt is still in-flight. Please wait and try again.",
+                        )
+                            .into_response());
+                    }
+                    _ => {
+                        // FAILED or NOT_FOUND — safe to retry
+                        info!(
+                            "Previous payment {} status: {} — safe to retry",
+                            prev_payment_id, status
+                        );
+                    }
+                },
+                Err(e) => {
+                    warn!(
+                        "Could not verify previous payment status: {} — allowing retry",
+                        e
+                    );
+                }
+            }
+        }
     }
 
     // Resolve the bolt11 invoice:
@@ -427,34 +426,55 @@ pub async fn claim_prize(
             .into_response());
     };
 
+    // Validate invoice amount if manually provided.
+    // Zero-amount invoices are fine (we specify the amount when paying).
+    // Non-zero invoices must match the exact prize amount.
+    if request.invoice.is_some() {
+        if let Some(invoice_sats) = parse_bolt11_amount(&invoice) {
+            if invoice_sats != prize.amount_sats {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "Invoice amount ({} sats) doesn't match prize amount ({} sats). \
+                         Use a zero-amount invoice or one for exactly {} sats.",
+                        invoice_sats, prize.amount_sats, prize.amount_sats
+                    ),
+                )
+                    .into_response());
+            }
+        }
+        // None means zero-amount invoice — that's fine
+    }
+
     // Store the invoice on the prize
-    let updated_prize = match state
+    if let Err(e) = state
         .payment_store
         .update_prize_with_invoice(user.id, &request.date, &invoice)
         .await
     {
-        Ok(Some(p)) => p,
-        Ok(None) => {
-            return Err(
-                (StatusCode::NOT_FOUND, "Failed to update prize with invoice").into_response(),
-            );
-        }
-        Err(e) => {
-            error!("Failed to update prize with invoice: {}", e);
-            return Err(map_error(e));
-        }
-    };
+        error!("Failed to update prize with invoice: {}", e);
+        return Err(map_error(e));
+    }
+
+    // Mark as "paying" before attempting — prevents concurrent retries
+    if let Err(e) = state
+        .payment_store
+        .update_prize_status(prize.id, "paying", None)
+        .await
+    {
+        error!("Failed to mark prize as paying: {}", e);
+    }
 
     // Send the payment
     match state
         .lightning_provider
-        .send_payment(&invoice, updated_prize.amount_sats)
+        .send_payment(&invoice, prize.amount_sats)
         .await
     {
         Ok(payment_id) => {
             if let Err(e) = state
                 .payment_store
-                .update_prize_status(updated_prize.id, "paid", Some(&payment_id))
+                .update_prize_status(prize.id, "paid", Some(&payment_id))
                 .await
             {
                 error!("Failed to update prize status: {}", e);
@@ -462,7 +482,7 @@ pub async fn claim_prize(
 
             info!(
                 "Prize payment successful for user_id: {}, amount: {}",
-                user.id, updated_prize.amount_sats
+                user.id, prize.amount_sats
             );
 
             if let Err(e) = state
@@ -470,7 +490,7 @@ pub async fn claim_prize(
                 .publish_prize_payout(
                     &user.nostr_pubkey,
                     &request.date,
-                    updated_prize.amount_sats,
+                    prize.amount_sats,
                     &payment_id,
                 )
                 .await
@@ -484,16 +504,20 @@ pub async fn claim_prize(
                     "success": true,
                     "message": "Prize payment sent successfully",
                     "payment_id": payment_id,
-                    "amount": updated_prize.amount_sats
+                    "amount": prize.amount_sats
                 })),
             ))
         }
         Err(e) => {
             error!("Failed to send prize payment: {}", e);
 
+            // Record as failed — but extract and store the payment hash
+            // from the error if possible, so we can verify it on retry.
+            // The payment hash comes from the invoice, not the response,
+            // so we store the invoice itself for re-verification.
             if let Err(update_err) = state
                 .payment_store
-                .update_prize_status(updated_prize.id, "failed", None)
+                .update_prize_status(prize.id, "failed", prize.payment_id.as_deref())
                 .await
             {
                 error!(
@@ -504,7 +528,7 @@ pub async fn claim_prize(
 
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to send payment: {}", e),
+                format!("Payment failed: {}. You can retry from your profile.", e),
             )
                 .into_response())
         }

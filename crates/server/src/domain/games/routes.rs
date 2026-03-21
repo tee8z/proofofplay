@@ -158,6 +158,14 @@ pub async fn start_new_session(
         Err(e) => return Err(map_error(e)),
     };
 
+    // Check bans
+    if user.banned != 0 {
+        return Err((StatusCode::FORBIDDEN, "Account suspended").into_response());
+    }
+    if let Ok(true) = state.game_store.is_ip_banned(&client_ip).await {
+        return Err((StatusCode::FORBIDDEN, "Access denied").into_response());
+    }
+
     // Check if the user has remaining plays from a previous payment
     let remaining_plays = match state.payment_store.get_remaining_plays(user.id).await {
         Ok(plays) => plays,

@@ -318,6 +318,7 @@ impl PaymentStore {
         let end_date = format!("{} 23:59:59", date);
 
         // Use raw query to avoid macro issues
+        // Exclude banned users from winning
         let query = format!(
             "SELECT
                 s.user_id,
@@ -327,6 +328,7 @@ impl PaymentStore {
             FROM scores s
             JOIN users u ON s.user_id = u.id
             WHERE s.created_at >= '{}' AND s.created_at <= '{}'
+              AND u.banned = 0
             GROUP BY s.user_id
             ORDER BY top_score DESC
             LIMIT 1",
@@ -513,6 +515,71 @@ impl PaymentStore {
         .await?;
 
         Ok(payout)
+    }
+
+    /// Get a claimable prize for a user on a specific date.
+    /// Claimable = pending or failed (not paying/in-flight, not already paid).
+    pub async fn get_claimable_prize(
+        &self,
+        user_id: i64,
+        date: &str,
+    ) -> Result<Option<PrizePayout>, Error> {
+        let payout = sqlx::query_as!(
+            PrizePayout,
+            r#"
+            SELECT id, user_id, date, score, amount_sats, payment_request, payment_id, status, created_at, updated_at, paid_at
+            FROM prize_payouts
+            WHERE user_id = ? AND date = ? AND status IN ('pending', 'failed')
+            "#,
+            user_id,
+            date
+        )
+        .fetch_optional(&self.db)
+        .await?;
+
+        Ok(payout)
+    }
+
+    /// Get all claimable prizes for a user (pending or failed — both are retryable).
+    pub async fn get_claimable_prizes(&self, user_id: i64) -> Result<Vec<PrizePayout>, Error> {
+        let payouts = sqlx::query_as!(
+            PrizePayout,
+            r#"
+            SELECT id, user_id, date, score, amount_sats, payment_request, payment_id, status, created_at, updated_at, paid_at
+            FROM prize_payouts
+            WHERE user_id = ? AND status IN ('pending', 'failed')
+            ORDER BY date DESC
+            "#,
+            user_id
+        )
+        .fetch_all(&self.db)
+        .await?;
+
+        Ok(payouts)
+    }
+
+    /// Get recent paid prizes for a user (for profile history display).
+    pub async fn get_recent_paid_prizes(
+        &self,
+        user_id: i64,
+        limit: i64,
+    ) -> Result<Vec<PrizePayout>, Error> {
+        let payouts = sqlx::query_as!(
+            PrizePayout,
+            r#"
+            SELECT id, user_id, date, score, amount_sats, payment_request, payment_id, status, created_at, updated_at, paid_at
+            FROM prize_payouts
+            WHERE user_id = ? AND status = 'paid'
+            ORDER BY paid_at DESC
+            LIMIT ?
+            "#,
+            user_id,
+            limit
+        )
+        .fetch_all(&self.db)
+        .await?;
+
+        Ok(payouts)
     }
 
     /// Get aggregate stats for a user's profile.

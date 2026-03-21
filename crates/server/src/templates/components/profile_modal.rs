@@ -38,6 +38,35 @@ pub fn profile_modal() -> Markup {
                     }
                 }
 
+                // Ban banner (shown when user is banned)
+                p id="profileBanBanner" class="nes-text is-error" style="display: none; background: #ff444433; padding: 10px; margin-bottom: 16px; text-align: center;" {}
+
+                // Prize claim section (shown when there's a pending prize)
+                div id="prizeClaimSection" class="nes-container is-dark" style="margin-bottom: 16px; display: none;" {
+                    h3 class="nes-text is-success" style="margin-bottom: 8px;" { "Prize Available!" }
+                    p id="prizeClaimInfo" style="font-size: 0.8em; margin-bottom: 8px;" {}
+                    div class="nes-field" {
+                        label for="prizeInvoiceInput" { "Paste your bolt11 invoice:" }
+                        input type="text" id="prizeInvoiceInput" class="nes-input"
+                            placeholder="lnbc..." autocomplete="off";
+                    }
+                    p id="prizeClaimStatus" class="help-text" style="margin-top: 4px;" {}
+                    div style="margin-top: 10px; display: flex; gap: 8px;" {
+                        button id="claimPrizeBtn" class="nes-btn is-success" {
+                            "Claim Prize"
+                        }
+                        button id="claimViaLnurlBtn" class="nes-btn is-primary" style="display: none;" {
+                            "Claim via Lightning Address"
+                        }
+                    }
+                }
+
+                // Recent winnings (shown when no pending prizes, or after claiming)
+                div id="prizeHistorySection" class="nes-container is-dark" style="margin-bottom: 16px; display: none;" {
+                    h3 class="nes-text is-success" style="margin-bottom: 8px;" { "Recent Winnings" }
+                    div id="prizeHistoryList" style="font-size: 0.8em;" {}
+                }
+
                 // Lightning address section
                 div class="nes-container is-dark" {
                     h3 class="nes-text is-warning" style="margin-bottom: 8px;" { "Lightning Address" }

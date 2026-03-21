@@ -34,15 +34,21 @@ use tower_http::{
 use nostr_sdk::Keys;
 
 use crate::{
-    check_payment_status, check_prize_eligibility, claim_prize, config::Settings,
-    file_utils::create_folder, game_handler, get_competition_info, get_game_config,
-    get_ledger_events, get_ledger_summary, get_replay_by_score, get_server_pubkey,
-    get_top_replays, get_top_scores, get_user_profile, get_user_scores, health_check,
-    home_handler, index_handler, leaderboard_handler, leaderboard_rows_handler, login,
-    login_username, nav_fragment_handler, register, register_username,
-    routes::admin::admin_dashboard, run_competition_task, secrets::get_key, start_new_session,
-    submit_score, update_lightning_address, GameStore, LedgerService, LedgerStore,
-    LightningProvider, LightningService, LndClient, PaymentStore, UserStore,
+    check_payment_status, check_prize_eligibility, claim_prize,
+    config::Settings,
+    file_utils::create_folder,
+    game_handler, get_competition_info, get_game_config, get_ledger_events, get_ledger_summary,
+    get_replay_by_score, get_server_pubkey, get_top_replays, get_top_scores, get_user_profile,
+    get_user_scores, health_check, home_handler, index_handler, leaderboard_handler,
+    leaderboard_rows_handler, login, login_username, nav_fragment_handler, register,
+    register_username, reset_password,
+    routes::admin::{
+        admin_ban_ip, admin_ban_user, admin_dashboard, admin_unban_ip, admin_unban_user,
+    },
+    run_competition_task,
+    secrets::get_key,
+    start_new_session, submit_score, update_lightning_address, GameStore, LedgerService,
+    LedgerStore, LightningProvider, LightningService, LndClient, PaymentStore, UserStore,
 };
 pub struct Application {
     server: Serve<
@@ -234,6 +240,7 @@ pub fn app(app_state: AppState, serve_dir: ServeDir) -> Router {
         .route("/register", post(register))
         .route("/username/register", post(register_username))
         .route("/username/login", post(login_username))
+        .route("/reset-password", post(reset_password))
         .route("/profile", get(get_user_profile))
         .route("/lightning-address", post(update_lightning_address));
 
@@ -272,6 +279,10 @@ pub fn app(app_state: AppState, serve_dir: ServeDir) -> Router {
         .route("/fragments/leaderboard-rows", get(leaderboard_rows_handler))
         .route("/fragments/nav", get(nav_fragment_handler))
         .route("/admin", get(admin_dashboard))
+        .route("/admin/ban-ip", post(admin_ban_ip))
+        .route("/admin/unban-ip", post(admin_unban_ip))
+        .route("/admin/ban-user", post(admin_ban_user))
+        .route("/admin/unban-user", post(admin_unban_user))
         .route("/api/v1/health_check", get(health_check))
         .nest("/api/v1/users", users_endpoints)
         .nest("/api/v1/game", game_endpoints)

@@ -200,11 +200,15 @@ impl LndClient {
         );
 
         let url = format!("{}/v2/router/send", self.base_url);
-        let body = serde_json::json!({
+        // Include amt for zero-amount invoices (LND requires it explicitly)
+        let mut body = serde_json::json!({
             "payment_request": payment_request,
             "timeout_seconds": 60,
             "fee_limit_sat": fee_limit_sats.to_string(),
         });
+        if amount_sats > 0 {
+            body["amt"] = serde_json::json!(amount_sats.to_string());
+        }
 
         let response = self
             .client

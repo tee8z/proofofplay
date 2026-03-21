@@ -26,6 +26,8 @@ pub struct LoginResponse {
     pub username: String,
     pub pubkey: String,
     pub lightning_address: Option<String>,
+    pub banned: bool,
+    pub ban_reason: Option<String>,
 }
 
 // --- Extension-based auth (existing) ---
@@ -44,6 +46,8 @@ pub async fn login(
                 username: user_info.username,
                 pubkey: user_info.pubkey,
                 lightning_address: user_info.lightning_address,
+                banned: user_info.banned,
+                ban_reason: user_info.ban_reason.clone(),
             };
             Ok((StatusCode::OK, Json(response)))
         }
@@ -69,6 +73,8 @@ pub async fn register(
                 username: user_info.username,
                 pubkey: user_info.pubkey,
                 lightning_address: user_info.lightning_address,
+                banned: user_info.banned,
+                ban_reason: user_info.ban_reason.clone(),
             };
             Ok((StatusCode::CREATED, Json(response)))
         }
@@ -236,6 +242,48 @@ pub async fn login_username(
     ))
 }
 
+// --- Password reset (via recovery key) ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResetPasswordPayload {
+    pub password: String,
+    pub encrypted_nsec: String,
+}
+
+pub async fn reset_password(
+    auth: NostrAuth,
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<ResetPasswordPayload>,
+) -> Result<impl IntoResponse, Response> {
+    let pubkey = auth.pubkey.to_string();
+    info!("Password reset request from pubkey: {}", pubkey);
+
+    let user = match state.user_store.find_by_pubkey(pubkey).await {
+        Ok(Some(user)) => user,
+        Ok(None) => return Err((StatusCode::NOT_FOUND, "User not found").into_response()),
+        Err(e) => return Err(map_error(e)),
+    };
+
+    if let Err(msg) = validate_password_strength(&payload.password) {
+        return Err((StatusCode::BAD_REQUEST, msg).into_response());
+    }
+
+    let password_hash = hash_password(&payload.password).map_err(|e| {
+        error!("Password hash error: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, "Internal error").into_response()
+    })?;
+
+    state
+        .user_store
+        .update_password(user.id, &password_hash, &payload.encrypted_nsec)
+        .await
+        .map_err(map_error)?;
+
+    info!("Password reset successful for user_id: {}", user.id);
+
+    Ok((StatusCode::OK, Json(serde_json::json!({ "success": true }))))
+}
+
 // --- Lightning address management ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -249,6 +297,15 @@ pub struct UserProfileResponse {
     pub pubkey: String,
     pub lightning_address: Option<String>,
     pub stats: crate::domain::payments::UserStats,
+    pub recent_winnings: Vec<WinningEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WinningEntry {
+    pub date: String,
+    pub amount_sats: i64,
+    pub score: i64,
+    pub paid_at: Option<String>,
 }
 
 pub async fn get_user_profile(
@@ -269,6 +326,22 @@ pub async fn get_user_profile(
         .await
         .map_err(map_error)?;
 
+    let recent_paid = state
+        .payment_store
+        .get_recent_paid_prizes(user.id, 5)
+        .await
+        .unwrap_or_default();
+
+    let recent_winnings: Vec<WinningEntry> = recent_paid
+        .into_iter()
+        .map(|p| WinningEntry {
+            date: p.date,
+            amount_sats: p.amount_sats,
+            score: p.score,
+            paid_at: p.paid_at,
+        })
+        .collect();
+
     Ok((
         StatusCode::OK,
         Json(UserProfileResponse {
@@ -276,6 +349,7 @@ pub async fn get_user_profile(
             pubkey: user.nostr_pubkey,
             lightning_address: user.lightning_address,
             stats,
+            recent_winnings,
         }),
     ))
 }
@@ -298,7 +372,10 @@ pub async fn update_lightning_address(
     let normalized = match &payload.lightning_address {
         Some(addr) if !addr.trim().is_empty() => {
             let normalized = normalize_lightning_address(addr).map_err(|e| {
-                (StatusCode::BAD_REQUEST, format!("Invalid lightning address: {}", e))
+                (
+                    StatusCode::BAD_REQUEST,
+                    format!("Invalid lightning address: {}", e),
+                )
                     .into_response()
             })?;
             Some(normalized)

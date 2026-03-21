@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS banned_ips;
+ALTER TABLE users DROP COLUMN banned;
+ALTER TABLE users DROP COLUMN ban_reason;

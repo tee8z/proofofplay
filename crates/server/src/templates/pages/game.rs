@@ -3,10 +3,23 @@ use maud::{html, Markup};
 use crate::templates::layouts::base::{base, PageConfig};
 
 pub fn game_page(config: &PageConfig) -> Markup {
-    base(config, game_content(config.entry_fee_sats, config.plays_per_payment, config.plays_ttl_minutes, config.prize_pool_pct))
+    base(
+        config,
+        game_content(
+            config.entry_fee_sats,
+            config.plays_per_payment,
+            config.plays_ttl_minutes,
+            config.prize_pool_pct,
+        ),
+    )
 }
 
-pub fn game_content(entry_fee_sats: i64, plays_per_payment: i32, plays_ttl_minutes: i64, prize_pool_pct: u8) -> Markup {
+pub fn game_content(
+    entry_fee_sats: i64,
+    plays_per_payment: i32,
+    plays_ttl_minutes: i64,
+    prize_pool_pct: u8,
+) -> Markup {
     html! {
         div id="game-section" {
             div id="start-screen" class="nes-container is-dark" {

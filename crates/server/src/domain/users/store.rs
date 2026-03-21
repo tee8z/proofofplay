@@ -15,6 +15,8 @@ pub struct User {
     pub password_hash: Option<String>,
     pub encrypted_nsec: Option<String>,
     pub lightning_address: Option<String>,
+    pub banned: i64,
+    pub ban_reason: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -26,6 +28,8 @@ pub struct UserInfo {
     pub pubkey: String,
     pub session_id: String,
     pub lightning_address: Option<String>,
+    pub banned: bool,
+    pub ban_reason: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -47,7 +51,7 @@ impl UserStore {
         let user = sqlx::query_as!(
             User,
             r#"
-            SELECT id, nostr_pubkey, username, password_hash, encrypted_nsec, lightning_address, created_at, updated_at
+            SELECT id, nostr_pubkey, username, password_hash, encrypted_nsec, lightning_address, banned, ban_reason, created_at, updated_at
             FROM users
             WHERE id = ?
             "#,
@@ -63,7 +67,7 @@ impl UserStore {
         let user = sqlx::query_as!(
             User,
             r#"
-            SELECT id, nostr_pubkey, username, password_hash, encrypted_nsec, lightning_address, created_at, updated_at
+            SELECT id, nostr_pubkey, username, password_hash, encrypted_nsec, lightning_address, banned, ban_reason, created_at, updated_at
             FROM users
             WHERE nostr_pubkey = ?
             "#,
@@ -79,7 +83,7 @@ impl UserStore {
         let user = sqlx::query_as!(
             User,
             r#"
-            SELECT id, nostr_pubkey, username, password_hash, encrypted_nsec, lightning_address, created_at, updated_at
+            SELECT id, nostr_pubkey, username, password_hash, encrypted_nsec, lightning_address, banned, ban_reason, created_at, updated_at
             FROM users
             WHERE username = ? AND password_hash IS NOT NULL
             "#,
@@ -123,6 +127,8 @@ impl UserStore {
             pubkey,
             session_id,
             lightning_address: user.lightning_address,
+            banned: user.banned != 0,
+            ban_reason: user.ban_reason,
         })
     }
 
@@ -156,6 +162,8 @@ impl UserStore {
             pubkey,
             session_id,
             lightning_address: None,
+            banned: false,
+            ban_reason: None,
         })
     }
 
@@ -191,9 +199,58 @@ impl UserStore {
             password_hash: Some(password_hash),
             encrypted_nsec: Some(encrypted_nsec),
             lightning_address: None,
+            banned: 0,
+            ban_reason: None,
             created_at: now.clone(),
             updated_at: now,
         })
+    }
+
+    pub async fn update_password(
+        &self,
+        user_id: i64,
+        password_hash: &str,
+        encrypted_nsec: &str,
+    ) -> Result<(), Error> {
+        let now = OffsetDateTime::now_utc().to_string();
+        sqlx::query!(
+            r#"
+            UPDATE users SET password_hash = ?, encrypted_nsec = ?, updated_at = ?
+            WHERE id = ?
+            "#,
+            password_hash,
+            encrypted_nsec,
+            now,
+            user_id,
+        )
+        .execute(&self.db)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn ban_user(&self, user_id: i64, reason: &str) -> Result<(), Error> {
+        let now = OffsetDateTime::now_utc().to_string();
+        sqlx::query!(
+            r#"UPDATE users SET banned = 1, ban_reason = ?, updated_at = ? WHERE id = ?"#,
+            reason,
+            now,
+            user_id,
+        )
+        .execute(&self.db)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn unban_user(&self, user_id: i64) -> Result<(), Error> {
+        let now = OffsetDateTime::now_utc().to_string();
+        sqlx::query!(
+            r#"UPDATE users SET banned = 0, ban_reason = NULL, updated_at = ? WHERE id = ?"#,
+            now,
+            user_id,
+        )
+        .execute(&self.db)
+        .await?;
+        Ok(())
     }
 
     pub async fn update_lightning_address(
@@ -240,6 +297,8 @@ impl UserStore {
             password_hash: None,
             encrypted_nsec: None,
             lightning_address: None,
+            banned: 0,
+            ban_reason: None,
             created_at: now.clone(),
             updated_at: now,
         };

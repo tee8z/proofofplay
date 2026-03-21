@@ -4,10 +4,25 @@ use crate::domain::ScoreWithUsername;
 use crate::templates::layouts::base::{base, PageConfig};
 
 pub fn home_page(config: &PageConfig, scores: &[ScoreWithUsername]) -> Markup {
-    base(config, home_content(config.entry_fee_sats, config.plays_per_payment, config.plays_ttl_minutes, config.prize_pool_pct, scores))
+    base(
+        config,
+        home_content(
+            config.entry_fee_sats,
+            config.plays_per_payment,
+            config.plays_ttl_minutes,
+            config.prize_pool_pct,
+            scores,
+        ),
+    )
 }
 
-pub fn home_content(entry_fee_sats: i64, plays_per_payment: i32, plays_ttl_minutes: i64, prize_pool_pct: u8, scores: &[ScoreWithUsername]) -> Markup {
+pub fn home_content(
+    entry_fee_sats: i64,
+    plays_per_payment: i32,
+    plays_ttl_minutes: i64,
+    prize_pool_pct: u8,
+    scores: &[ScoreWithUsername],
+) -> Markup {
     html! {
         div id="welcome-screen" class="nes-container is-dark" {
             h1 class="nes-text is-primary" { "Proof of Play" }

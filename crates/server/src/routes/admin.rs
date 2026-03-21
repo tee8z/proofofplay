@@ -1,9 +1,11 @@
 use axum::{
     extract::{ConnectInfo, State},
     http::StatusCode,
-    response::{Html, IntoResponse, Response},
+    response::{Html, IntoResponse, Redirect, Response},
+    Form,
 };
-use log::warn;
+use log::{info, warn};
+use serde::Deserialize;
 use sqlx::Row;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
@@ -112,9 +114,26 @@ pub async fn admin_dashboard(
         "SELECT client_ip, COUNT(DISTINCT user_id) as accounts, COUNT(*) as games FROM score_metadata WHERE client_ip IS NOT NULL GROUP BY client_ip HAVING accounts > 1 ORDER BY accounts DESC LIMIT 10"
     ).await;
 
-    // Prize payouts
+    // Prize payouts (include payment_id hash)
     let recent_payouts = query_rows(&state,
-        "SELECT pp.date, u.username, pp.score, pp.amount_sats, pp.status FROM prize_payouts pp JOIN users u ON pp.user_id = u.id ORDER BY pp.date DESC LIMIT 5"
+        "SELECT pp.date, u.username, pp.score, pp.amount_sats, pp.status, COALESCE(pp.payment_id, '') FROM prize_payouts pp JOIN users u ON pp.user_id = u.id ORDER BY pp.date DESC LIMIT 10"
+    ).await;
+
+    // Recent entry fee payments (include payment_id hash)
+    let recent_entries = query_rows(&state,
+        &format!("SELECT u.username, gp.amount_sats, gp.status, gp.payment_id, gp.created_at FROM game_payments gp JOIN users u ON gp.user_id = u.id WHERE gp.created_at >= '{today}' ORDER BY gp.created_at DESC LIMIT 20")
+    ).await;
+
+    // Banned IPs
+    let banned_ips = query_rows(
+        &state,
+        "SELECT ip, COALESCE(reason, ''), banned_at FROM banned_ips ORDER BY banned_at DESC",
+    )
+    .await;
+
+    // Banned users
+    let banned_users = query_rows(&state,
+        "SELECT id, username, COALESCE(ban_reason, '') FROM users WHERE banned = 1 ORDER BY updated_at DESC"
     ).await;
 
     let entry_fee = state.settings.competition_settings.entry_fee_sats;
@@ -142,6 +161,8 @@ table {{ border-collapse: collapse; width: 100%; margin: 10px 0; }}
 th, td {{ text-align: left; padding: 8px; border-bottom: 1px solid #333; }}
 th {{ color: #ffaa00; }}
 .flag {{ background: #ff444433; color: #ff8888; padding: 2px 6px; border-radius: 3px; font-size: 0.85em; }}
+td {{ max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+td:hover {{ overflow: visible; white-space: normal; word-break: break-all; }}
 .ok {{ color: #00ff88; }}
 .warn {{ color: #ffaa00; }}
 .error {{ color: #ff4444; }}
@@ -182,9 +203,43 @@ th {{ color: #ffaa00; }}
 {ips_html}
 </table>
 
+<h2>Ban Management</h2>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+  <div>
+    <h3 style="color: #ff4444;">Ban IP</h3>
+    <form method="POST" action="/admin/ban-ip" style="display: flex; gap: 8px; flex-wrap: wrap;">
+      <input name="ip" placeholder="IP address" style="background: #16213e; color: #fff; border: 1px solid #333; padding: 6px; font-family: monospace;">
+      <input name="reason" placeholder="Reason" style="background: #16213e; color: #fff; border: 1px solid #333; padding: 6px; font-family: monospace;">
+      <button type="submit" style="background: #ff4444; color: #fff; border: none; padding: 6px 12px; cursor: pointer; font-family: monospace;">Ban</button>
+    </form>
+    <table style="margin-top: 10px;">
+      <tr><th>IP</th><th>Reason</th><th>When</th><th></th></tr>
+      {banned_ips_html}
+    </table>
+  </div>
+  <div>
+    <h3 style="color: #ff4444;">Ban User</h3>
+    <form method="POST" action="/admin/ban-user" style="display: flex; gap: 8px; flex-wrap: wrap;">
+      <input name="user_id" type="number" placeholder="User ID" style="background: #16213e; color: #fff; border: 1px solid #333; padding: 6px; width: 80px; font-family: monospace;">
+      <input name="reason" placeholder="Reason" style="background: #16213e; color: #fff; border: 1px solid #333; padding: 6px; font-family: monospace;">
+      <button type="submit" style="background: #ff4444; color: #fff; border: none; padding: 6px 12px; cursor: pointer; font-family: monospace;">Ban</button>
+    </form>
+    <table style="margin-top: 10px;">
+      <tr><th>ID</th><th>Username</th><th>Reason</th><th></th></tr>
+      {banned_users_html}
+    </table>
+  </div>
+</div>
+
+<h2>Today's Entry Payments</h2>
+<table>
+<tr><th>Player</th><th>Amount</th><th>Status</th><th>Payment Hash</th><th>When</th></tr>
+{entries_html}
+</table>
+
 <h2>Recent Prize Payouts</h2>
 <table>
-<tr><th>Date</th><th>Winner</th><th>Score</th><th>Prize (sats)</th><th>Status</th></tr>
+<tr><th>Date</th><th>Winner</th><th>Score</th><th>Prize (sats)</th><th>Status</th><th>Payment Hash</th></tr>
 {payouts_html}
 </table>
 
@@ -203,7 +258,10 @@ th {{ color: #ffaa00; }}
         top_scores_html = render_rows(&top_scores),
         flags_html = render_rows(&recent_flags),
         ips_html = render_rows(&sus_ips),
+        entries_html = render_rows(&recent_entries),
         payouts_html = render_rows(&recent_payouts),
+        banned_ips_html = render_banned_ips(&banned_ips),
+        banned_users_html = render_banned_users(&banned_users),
         start = state.settings.competition_settings.start_time,
         duration = state.settings.competition_settings.duration_display(),
         bot_status = if state.settings.bot_detection.enabled {
@@ -265,4 +323,131 @@ fn render_rows(rows: &[Vec<String>]) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn render_banned_ips(rows: &[Vec<String>]) -> String {
+    if rows.is_empty() {
+        return "<tr><td colspan='4' style='color:#555'>No banned IPs</td></tr>".to_string();
+    }
+    rows.iter()
+        .map(|row| {
+            let ip = row.first().map(|s| s.as_str()).unwrap_or("");
+            let reason = row.get(1).map(|s| s.as_str()).unwrap_or("");
+            let when = row.get(2).map(|s| s.as_str()).unwrap_or("");
+            format!(
+                r#"<tr><td>{ip}</td><td>{reason}</td><td>{when}</td><td><form method="POST" action="/admin/unban-ip" style="display:inline"><input type="hidden" name="ip" value="{ip}"><button type="submit" style="background:#00ff88;color:#000;border:none;padding:2px 8px;cursor:pointer;font-family:monospace;font-size:0.85em;">Unban</button></form></td></tr>"#
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn render_banned_users(rows: &[Vec<String>]) -> String {
+    if rows.is_empty() {
+        return "<tr><td colspan='4' style='color:#555'>No banned users</td></tr>".to_string();
+    }
+    rows.iter()
+        .map(|row| {
+            let id = row.first().map(|s| s.as_str()).unwrap_or("");
+            let username = row.get(1).map(|s| s.as_str()).unwrap_or("");
+            let reason = row.get(2).map(|s| s.as_str()).unwrap_or("");
+            format!(
+                r#"<tr><td>{id}</td><td>{username}</td><td>{reason}</td><td><form method="POST" action="/admin/unban-user" style="display:inline"><input type="hidden" name="user_id" value="{id}"><button type="submit" style="background:#00ff88;color:#000;border:none;padding:2px 8px;cursor:pointer;font-family:monospace;font-size:0.85em;">Unban</button></form></td></tr>"#
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+// ── Admin actions ────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct BanIpForm {
+    pub ip: String,
+    pub reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct UnbanIpForm {
+    pub ip: String,
+}
+
+#[derive(Deserialize)]
+pub struct BanUserForm {
+    pub user_id: i64,
+    pub reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct UnbanUserForm {
+    pub user_id: i64,
+}
+
+pub async fn admin_ban_ip(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    State(state): State<Arc<AppState>>,
+    Form(form): Form<BanIpForm>,
+) -> Result<Redirect, Response> {
+    if !is_admin_allowed(&addr, &state.settings.admin.allowed_subnets) {
+        return Err((StatusCode::FORBIDDEN, "Not authorized").into_response());
+    }
+    info!("Admin: banning IP {}: {:?}", form.ip, form.reason);
+    state
+        .game_store
+        .ban_ip(&form.ip, form.reason.as_deref(), Some("admin"))
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())?;
+    Ok(Redirect::to("/admin"))
+}
+
+pub async fn admin_unban_ip(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    State(state): State<Arc<AppState>>,
+    Form(form): Form<UnbanIpForm>,
+) -> Result<Redirect, Response> {
+    if !is_admin_allowed(&addr, &state.settings.admin.allowed_subnets) {
+        return Err((StatusCode::FORBIDDEN, "Not authorized").into_response());
+    }
+    info!("Admin: unbanning IP {}", form.ip);
+    state
+        .game_store
+        .unban_ip(&form.ip)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())?;
+    Ok(Redirect::to("/admin"))
+}
+
+pub async fn admin_ban_user(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    State(state): State<Arc<AppState>>,
+    Form(form): Form<BanUserForm>,
+) -> Result<Redirect, Response> {
+    if !is_admin_allowed(&addr, &state.settings.admin.allowed_subnets) {
+        return Err((StatusCode::FORBIDDEN, "Not authorized").into_response());
+    }
+    let reason = form.reason.as_deref().unwrap_or("Banned by admin");
+    info!("Admin: banning user_id {}: {}", form.user_id, reason);
+    state
+        .user_store
+        .ban_user(form.user_id, reason)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())?;
+    Ok(Redirect::to("/admin"))
+}
+
+pub async fn admin_unban_user(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    State(state): State<Arc<AppState>>,
+    Form(form): Form<UnbanUserForm>,
+) -> Result<Redirect, Response> {
+    if !is_admin_allowed(&addr, &state.settings.admin.allowed_subnets) {
+        return Err((StatusCode::FORBIDDEN, "Not authorized").into_response());
+    }
+    info!("Admin: unbanning user_id {}", form.user_id);
+    state
+        .user_store
+        .unban_user(form.user_id)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())?;
+    Ok(Redirect::to("/admin"))
 }

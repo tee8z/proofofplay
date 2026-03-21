@@ -66,7 +66,10 @@ pub async fn run_competition_task(app_state: Arc<AppState>) {
         // Woke up — resolve the winner
         let target_date = OffsetDateTime::now_utc().date().to_string();
         if last_processed_date.as_deref() != Some(&target_date) {
-            info!("Competition window closed — resolving winner for {}", target_date);
+            info!(
+                "Competition window closed — resolving winner for {}",
+                target_date
+            );
             resolve_winner(&app_state, &target_date, prize_per_game, comp).await;
             last_processed_date = Some(target_date);
         }
@@ -157,10 +160,7 @@ async fn resolve_winner(
                     }
                 }
                 Ok(_) => {
-                    info!(
-                        "No paid games found for {}, no prize to award",
-                        target_date
-                    );
+                    info!("No paid games found for {}, no prize to award", target_date);
                 }
                 Err(e) => {
                     error!("Failed to count games for {}: {}", target_date, e);
@@ -168,10 +168,7 @@ async fn resolve_winner(
             }
         }
         Ok(None) => {
-            info!(
-                "No scores found for {}, no winner to announce",
-                target_date
-            );
+            info!("No scores found for {}, no winner to announce", target_date);
         }
         Err(e) => {
             error!("Failed to find top scorer for {}: {}", target_date, e);
@@ -228,24 +225,44 @@ async fn attempt_auto_payout(
         return;
     }
 
+    // Get the prize record so we can update its status
+    let prize = match state
+        .payment_store
+        .get_pending_prize_for_user(user_id, date)
+        .await
+    {
+        Ok(Some(p)) => p,
+        Ok(None) => {
+            warn!("Prize record not found for auto-payout");
+            return;
+        }
+        Err(e) => {
+            error!("Failed to look up prize for auto-payout: {}", e);
+            return;
+        }
+    };
+
+    // Mark as paying before attempting
+    if let Err(e) = state
+        .payment_store
+        .update_prize_status(prize.id, "paying", None)
+        .await
+    {
+        error!("Failed to mark prize as paying: {}", e);
+    }
+
     match state
         .lightning_provider
         .send_payment(&invoice, amount_sats)
         .await
     {
         Ok(payment_id) => {
-            if let Ok(Some(prize)) = state
+            if let Err(e) = state
                 .payment_store
-                .get_pending_prize_for_user(user_id, date)
+                .update_prize_status(prize.id, "paid", Some(&payment_id))
                 .await
             {
-                if let Err(e) = state
-                    .payment_store
-                    .update_prize_status(prize.id, "paid", Some(&payment_id))
-                    .await
-                {
-                    error!("Failed to update prize status after auto-pay: {}", e);
-                }
+                error!("Failed to update prize status after auto-pay: {}", e);
             }
 
             info!(
@@ -263,9 +280,20 @@ async fn attempt_auto_payout(
         }
         Err(e) => {
             error!(
-                "Auto-payout failed for {} ({} sats): {} — prize stays pending for manual claim",
+                "Auto-payout failed for {} ({} sats): {} — marked as failed for retry",
                 ln_addr, amount_sats, e
             );
+            // Mark as failed so user can retry manually (or next auto-attempt)
+            if let Err(update_err) = state
+                .payment_store
+                .update_prize_status(prize.id, "failed", None)
+                .await
+            {
+                error!(
+                    "Failed to update prize status after failure: {}",
+                    update_err
+                );
+            }
         }
     }
 }

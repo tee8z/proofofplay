@@ -152,10 +152,23 @@ class AuthClient {
     hideLoginModal() {
         const modal = document.getElementById("loginModal");
         if (modal) modal.classList.remove("is-active");
+        // Clear recovery key + password fields
         const keyInput = document.getElementById("loginPrivateKey");
         if (keyInput) keyInput.value = "";
+        const recoveryNewPw = document.getElementById("recoveryNewPassword");
+        if (recoveryNewPw) recoveryNewPw.value = "";
+        const recoveryConfirmPw = document.getElementById("recoveryConfirmPassword");
+        if (recoveryConfirmPw) recoveryConfirmPw.value = "";
+        // Clear username/password fields
+        const loginUsername = document.getElementById("loginUsername");
+        if (loginUsername) loginUsername.value = "";
+        const loginPassword = document.getElementById("loginPassword");
+        if (loginPassword) loginPassword.value = "";
+        // Clear errors
         const keyError = document.getElementById("privateKeyError");
         if (keyError) keyError.textContent = "";
+        const usernameError = document.getElementById("usernameLoginError");
+        if (usernameError) usernameError.textContent = "";
         const extError = document.getElementById("extensionLoginError");
         if (extError) extError.textContent = "";
     }
@@ -258,13 +271,51 @@ class AuthClient {
         const keyInput = document.getElementById("loginPrivateKey");
         const privateKey = keyInput ? keyInput.value : "";
         if (!privateKey) {
-            if (errorElement) errorElement.textContent = "Please enter your private key";
+            if (errorElement) errorElement.textContent = "Please enter your recovery key";
             return;
+        }
+
+        // Check if user wants to reset password
+        const newPassword = (document.getElementById("recoveryNewPassword")?.value || "").trim();
+        const confirmPassword = (document.getElementById("recoveryConfirmPassword")?.value || "").trim();
+
+        if (newPassword || confirmPassword) {
+            if (newPassword !== confirmPassword) {
+                if (errorElement) errorElement.textContent = "Passwords do not match";
+                return;
+            }
+            if (newPassword.length < 8) {
+                if (errorElement) errorElement.textContent = "Password must be at least 8 characters";
+                return;
+            }
         }
 
         try {
             await this.nostrClient.initialize(window.SignerType.PrivateKey, privateKey);
+
+            // Login first to establish auth
             await this.login("privatekey");
+
+            // If password reset was requested, do it now (we're authenticated)
+            if (newPassword) {
+                try {
+                    const encrypted_nsec = window.encryptNsecWithPassword(privateKey, newPassword);
+                    const apiBase = window.API_BASE || document.body.getAttribute("data-api-base") || "";
+                    const resp = await this.post(`${apiBase}/api/v1/users/reset-password`, {
+                        password: newPassword,
+                        encrypted_nsec,
+                    });
+                    if (resp.ok) {
+                        console.log("Password reset successful");
+                    } else {
+                        const msg = await resp.text();
+                        console.warn("Password reset failed:", msg);
+                        if (errorElement) errorElement.textContent = "Logged in, but password reset failed: " + msg;
+                    }
+                } catch (resetErr) {
+                    console.warn("Password reset error:", resetErr);
+                }
+            }
         } catch (error) {
             console.error("Private key login failed:", error);
             if (errorElement) errorElement.textContent = "Login failed. Please check your private key.";
@@ -457,6 +508,8 @@ class AuthClient {
         localStorage.removeItem("gameUsername");
         localStorage.removeItem("gameSignerType");
         localStorage.removeItem("lightningAddress");
+        localStorage.removeItem("banned");
+        localStorage.removeItem("banReason");
 
         this.nostrClient = new window.NostrClientWrapper();
         this.sessionId = null;
@@ -533,6 +586,15 @@ class AuthClient {
             localStorage.setItem("lightningAddress", data.lightning_address);
         } else {
             localStorage.removeItem("lightningAddress");
+        }
+
+        // Cache ban status
+        if (data.banned) {
+            localStorage.setItem("banned", "1");
+            localStorage.setItem("banReason", data.ban_reason || "");
+        } else {
+            localStorage.removeItem("banned");
+            localStorage.removeItem("banReason");
         }
 
         this.updateAuthUI();

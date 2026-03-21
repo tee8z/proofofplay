@@ -49,7 +49,27 @@ pub fn auth_modals() -> Markup {
                         input type="password" id="loginPrivateKey" class="nes-input";
                         p id="privateKeyError" class="help-text" {}
                     }
-                    button id="loginButton" class="nes-btn is-primary" { "Login" }
+
+                    div class="nes-container is-dark" style="margin-top: 12px;" {
+                        h4 class="nes-text is-warning" style="font-size: 0.8em; margin-bottom: 6px;" {
+                            "Reset Password (optional)"
+                        }
+                        p style="font-size: 0.65em; margin-bottom: 8px; opacity: 0.8;" {
+                            "Set a new password so you can log in with username/password again."
+                        }
+                        div class="nes-field" {
+                            label for="recoveryNewPassword" { "New Password:" }
+                            input type="password" id="recoveryNewPassword" class="nes-input"
+                                autocomplete="new-password";
+                        }
+                        div class="nes-field" style="margin-top: 8px;" {
+                            label for="recoveryConfirmPassword" { "Confirm Password:" }
+                            input type="password" id="recoveryConfirmPassword" class="nes-input"
+                                autocomplete="new-password";
+                        }
+                    }
+
+                    button id="loginButton" class="nes-btn is-primary" style="margin-top: 12px;" { "Login" }
                 }
 
                 p class="nes-text" style="margin-top: 20px;" {

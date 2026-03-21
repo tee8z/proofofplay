@@ -4,11 +4,22 @@ use crate::domain::ScoreWithUsername;
 use crate::templates::fragments::leaderboard_rows::leaderboard_rows;
 use crate::templates::layouts::base::{base, PageConfig};
 
-pub fn leaderboard_page(config: &PageConfig, prize_pool_sats: i64, scores: &[ScoreWithUsername]) -> Markup {
-    base(config, leaderboard_content(prize_pool_sats, config.prize_pool_pct, scores))
+pub fn leaderboard_page(
+    config: &PageConfig,
+    prize_pool_sats: i64,
+    scores: &[ScoreWithUsername],
+) -> Markup {
+    base(
+        config,
+        leaderboard_content(prize_pool_sats, config.prize_pool_pct, scores),
+    )
 }
 
-pub fn leaderboard_content(prize_pool_sats: i64, prize_pool_pct: u8, scores: &[ScoreWithUsername]) -> Markup {
+pub fn leaderboard_content(
+    prize_pool_sats: i64,
+    prize_pool_pct: u8,
+    scores: &[ScoreWithUsername],
+) -> Markup {
     html! {
         div class="leaderboard-container nes-container is-dark" {
             h2 class="nes-text is-primary" { "LEADERBOARD" }

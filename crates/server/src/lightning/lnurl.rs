@@ -9,8 +9,8 @@ use super::models::LightningError;
 #[serde(rename_all = "camelCase")]
 pub struct LnurlPayParams {
     pub callback: String,
-    pub min_sendable: i64,  // millisats
-    pub max_sendable: i64,  // millisats
+    pub min_sendable: i64, // millisats
+    pub max_sendable: i64, // millisats
     pub metadata: String,
     pub tag: Option<String>,
 }
@@ -36,8 +36,7 @@ pub fn normalize_lightning_address(input: &str) -> Result<String, LightningError
     let trimmed = input.trim();
 
     // CashApp shorthand: $cashtag → cashtag@cash.app
-    if trimmed.starts_with('$') {
-        let cashtag = &trimmed[1..];
+    if let Some(cashtag) = trimmed.strip_prefix('$') {
         if cashtag.is_empty()
             || !cashtag
                 .chars()
@@ -127,10 +126,7 @@ pub async fn resolve_lightning_address(
             .get("reason")
             .and_then(|r| r.as_str())
             .unwrap_or("Unknown error");
-        return Err(LightningError::ApiError(format!(
-            "LNURL error: {}",
-            reason
-        )));
+        return Err(LightningError::ApiError(format!("LNURL error: {}", reason)));
     }
 
     let params: LnurlPayParams = serde_json::from_value(body).map_err(|e| {

@@ -404,46 +404,46 @@ impl GameState {
                     // Split into smaller asteroids if not already small.
                     // Medium asteroids only split into Small at level >= min_split_level.
                     if let Some(smaller_size) = asteroid.size_class.smaller() {
-                    if asteroid.size_class != AsteroidSize::Medium
-                        || self.level >= self.config.asteroids.min_split_level
-                    {
-                        let smaller_radius =
-                            self.config.asteroids.size * smaller_size.radius_factor();
-                        for _ in 0..2 {
-                            let two = Fixed::from(2);
-                            let vx = (self.rng.next_fixed() * two - Fixed::ONE)
-                                * self.config.asteroids.speed
-                                * Fixed::from(2); // Fragments are faster
-                            let vy = (self.rng.next_fixed() * two - Fixed::ONE)
-                                * self.config.asteroids.speed
-                                * Fixed::from(2);
-                            let angle = self.rng.next_range(Fixed::ZERO, Fixed::from(256));
+                        if asteroid.size_class != AsteroidSize::Medium
+                            || self.level >= self.config.asteroids.min_split_level
+                        {
+                            let smaller_radius =
+                                self.config.asteroids.size * smaller_size.radius_factor();
+                            for _ in 0..2 {
+                                let two = Fixed::from(2);
+                                let vx = (self.rng.next_fixed() * two - Fixed::ONE)
+                                    * self.config.asteroids.speed
+                                    * Fixed::from(2); // Fragments are faster
+                                let vy = (self.rng.next_fixed() * two - Fixed::ONE)
+                                    * self.config.asteroids.speed
+                                    * Fixed::from(2);
+                                let angle = self.rng.next_range(Fixed::ZERO, Fixed::from(256));
 
-                            let vertices = self.rng.next_int_range(
-                                self.config.asteroids.vertices_min as i32,
-                                self.config.asteroids.vertices_max as i32 + 1,
-                            ) as u32;
-                            let offset_min = Fixed::from_ratio(4, 5);
-                            let offset_max = Fixed::from_ratio(6, 5);
-                            let mut offsets =
-                                Vec::with_capacity(self.config.asteroids.vertices_max as usize);
-                            for _ in 0..self.config.asteroids.vertices_max {
-                                offsets.push(self.rng.next_range(offset_min, offset_max));
+                                let vertices = self.rng.next_int_range(
+                                    self.config.asteroids.vertices_min as i32,
+                                    self.config.asteroids.vertices_max as i32 + 1,
+                                ) as u32;
+                                let offset_min = Fixed::from_ratio(4, 5);
+                                let offset_max = Fixed::from_ratio(6, 5);
+                                let mut offsets =
+                                    Vec::with_capacity(self.config.asteroids.vertices_max as usize);
+                                for _ in 0..self.config.asteroids.vertices_max {
+                                    offsets.push(self.rng.next_range(offset_min, offset_max));
+                                }
+
+                                new_asteroids.push(Asteroid {
+                                    x: asteroid.x,
+                                    y: asteroid.y,
+                                    velocity_x: vx,
+                                    velocity_y: vy,
+                                    radius: smaller_radius,
+                                    angle,
+                                    vertices,
+                                    offsets,
+                                    size_class: smaller_size,
+                                });
                             }
-
-                            new_asteroids.push(Asteroid {
-                                x: asteroid.x,
-                                y: asteroid.y,
-                                velocity_x: vx,
-                                velocity_y: vy,
-                                radius: smaller_radius,
-                                angle,
-                                vertices,
-                                offsets,
-                                size_class: smaller_size,
-                            });
                         }
-                    }
                     }
 
                     asteroids_to_remove.push(i);

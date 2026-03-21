@@ -148,6 +148,27 @@ impl LightningProvider {
         }
     }
 
+    /// Check the status of a previous outbound payment by its payment hash.
+    ///
+    /// Returns:
+    /// - `"SUCCEEDED"` — payment landed, do NOT retry (mark as paid)
+    /// - `"FAILED"` — confirmed failed on our node, safe to retry
+    /// - `"IN_FLIGHT"` — still in progress, do NOT retry
+    /// - `"NOT_FOUND"` — our node has no record of this payment, safe to retry
+    pub async fn check_outbound_payment(
+        &self,
+        payment_hash: &str,
+    ) -> Result<String, LightningError> {
+        match self {
+            Self::Lnd(client) => match client.track_payment(payment_hash).await {
+                Ok(resp) => Ok(resp.status),
+                Err(_) => Ok("NOT_FOUND".to_string()),
+            },
+            Self::Voltage(_) => Ok("NOT_FOUND".to_string()),
+            Self::Stub => Ok("FAILED".to_string()),
+        }
+    }
+
     /// Send an outbound payment via a bolt11 invoice.
     ///
     /// Returns the payment hash / id on success.
@@ -175,7 +196,10 @@ impl LightningProvider {
             }
             Self::Stub => {
                 let payment_hash = uuid::Uuid::new_v4().to_string().replace('-', "");
-                info!("Stub: sent payment {} sats -> {}", amount_sats, payment_hash);
+                info!(
+                    "Stub: sent payment {} sats -> {}",
+                    amount_sats, payment_hash
+                );
                 Ok(payment_hash)
             }
         }

@@ -56,6 +56,7 @@ pub struct ScoreWithUsername {
     pub level: i64,
     pub play_time: i64,
     pub created_at: String,
+    pub banned: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -410,7 +411,7 @@ impl GameStore {
     pub async fn get_top_scores(&self, limit: i64) -> Result<Vec<ScoreWithUsername>, Error> {
         let scores = sqlx::query!(
             r#"
-            SELECT s.id, s.user_id, s.score, s.level, s.play_time, s.created_at, u.username
+            SELECT s.id, s.user_id, s.score, s.level, s.play_time, s.created_at, u.username, u.banned
             FROM scores s
             JOIN users u ON s.user_id = u.id
             ORDER BY s.score DESC
@@ -428,6 +429,7 @@ impl GameStore {
             level: row.level,
             play_time: row.play_time,
             created_at: row.created_at,
+            banned: row.banned,
         })
         .collect();
 
@@ -451,6 +453,40 @@ impl GameStore {
         .await?;
 
         Ok(scores)
+    }
+
+    pub async fn is_ip_banned(&self, ip: &str) -> Result<bool, Error> {
+        let result = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count: i64" FROM banned_ips WHERE ip = ?"#,
+            ip
+        )
+        .fetch_one(&self.db)
+        .await?;
+        Ok(result > 0)
+    }
+
+    pub async fn ban_ip(
+        &self,
+        ip: &str,
+        reason: Option<&str>,
+        banned_by: Option<&str>,
+    ) -> Result<(), Error> {
+        sqlx::query!(
+            r#"INSERT OR IGNORE INTO banned_ips (ip, reason, banned_by) VALUES (?, ?, ?)"#,
+            ip,
+            reason,
+            banned_by,
+        )
+        .execute(&self.db)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn unban_ip(&self, ip: &str) -> Result<(), Error> {
+        sqlx::query!(r#"DELETE FROM banned_ips WHERE ip = ?"#, ip)
+            .execute(&self.db)
+            .await?;
+        Ok(())
     }
 
     pub async fn get_ip_activity(&self, client_ip: &str) -> Result<(i64, i64), Error> {
@@ -552,10 +588,7 @@ impl GameStore {
     }
 
     /// Get replay data for a specific score by its score_id.
-    pub async fn get_replay_by_score_id(
-        &self,
-        score_id: i64,
-    ) -> Result<Option<ReplayData>, Error> {
+    pub async fn get_replay_by_score_id(&self, score_id: i64) -> Result<Option<ReplayData>, Error> {
         let row = sqlx::query(
             r#"
             SELECT
