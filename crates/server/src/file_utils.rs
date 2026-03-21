@@ -6,7 +6,7 @@ pub fn create_folder(root_path: &str) {
 
     if !path.exists() || !path.is_dir() {
         // Create the folder if it doesn't exist
-        if let Err(err) = fs::create_dir(path) {
+        if let Err(err) = fs::create_dir_all(path) {
             error!("Folder creating folder: {}", err);
         } else {
             info!("Folder created: {}", root_path);

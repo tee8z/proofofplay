@@ -365,8 +365,13 @@ jobs:
         with:
           name: ui-assets
 
-      - name: Set up server binary
-        run: chmod +x ./bin/server
+      - name: Set up server binary and test credentials
+        run: |
+          chmod +x ./bin/server
+          mkdir -p creds
+          echo '-----BEGIN EC PRIVATE KEY-----' > creds/test.pem
+          echo '8eXd9bWq6qFJISxx4ggAvkxXPkv6/GyOTtvo0w1t4cg=' >> creds/test.pem
+          echo '-----END EC PRIVATE KEY-----' >> creds/test.pem
 
       - uses: actions/setup-node@v4
         with:
