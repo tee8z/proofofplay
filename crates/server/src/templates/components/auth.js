@@ -113,6 +113,152 @@ class AuthClient {
             closeHowToPlay.addEventListener("click", () => howToPlayModal.classList.remove("is-active"));
         }
 
+        // Tip modal
+        const tipLink = document.querySelector(".tip-link");
+        const tipModal = document.getElementById("tipModal");
+        const closeTipModal = document.getElementById("closeTipModal");
+        if (tipLink && tipModal) {
+            tipLink.addEventListener("click", function() {
+                tipModal.classList.add("is-active");
+            });
+        }
+        if (closeTipModal && tipModal) {
+            closeTipModal.addEventListener("click", function() {
+                tipModal.classList.remove("is-active");
+            });
+        }
+
+        // Tip preset buttons
+        document.querySelectorAll(".tip-preset").forEach(function(btn) {
+            btn.addEventListener("click", function() {
+                const input = document.getElementById("tipAmountInput");
+                if (input) input.value = btn.getAttribute("data-amount");
+            });
+        });
+
+        // Copy tip address
+        const tipCopyAddrBtn = document.getElementById("tipCopyAddressBtn");
+        if (tipCopyAddrBtn) {
+            tipCopyAddrBtn.addEventListener("click", function() {
+                const addrEl = document.getElementById("tipAddressDisplay");
+                if (addrEl) {
+                    navigator.clipboard.writeText(addrEl.textContent.trim()).then(function() {
+                        const copied = document.getElementById("tipAddressCopied");
+                        if (copied) {
+                            copied.style.display = "inline";
+                            setTimeout(function() { copied.style.display = "none"; }, 2000);
+                        }
+                    }).catch(function() {});
+                }
+            });
+        }
+
+        // Generate tip invoice
+        const tipSendBtn = document.getElementById("tipSendBtn");
+        if (tipSendBtn) {
+            tipSendBtn.addEventListener("click", async function() {
+                const input = document.getElementById("tipAmountInput");
+                const amount = parseInt(input && input.value, 10);
+                if (!amount || amount < 1) {
+                    if (input) input.focus();
+                    return;
+                }
+
+                tipSendBtn.disabled = true;
+                tipSendBtn.textContent = "Loading...";
+
+                try {
+                    const apiBase = window.API_BASE || "";
+                    const resp = await fetch(apiBase + "/api/v1/payments/tip", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ amount_sats: amount }),
+                    });
+
+                    if (!resp.ok) {
+                        const errText = await resp.text();
+                        throw new Error(errText);
+                    }
+
+                    const data = await resp.json();
+
+                    // Show invoice step
+                    const addressStep = document.getElementById("tipAddressStep");
+                    const invoiceStep = document.getElementById("tipInvoiceStep");
+                    if (addressStep) addressStep.style.display = "none";
+                    if (invoiceStep) invoiceStep.style.display = "block";
+
+                    // QR code
+                    const qrContainer = document.getElementById("tipQrContainer");
+                    if (qrContainer) {
+                        qrContainer.innerHTML = "";
+                        const qrSize = Math.min(250, window.innerWidth - 100);
+                        const qrEl = document.createElement("bitcoin-qr");
+                        qrEl.setAttribute("lightning", data.invoice);
+                        qrEl.setAttribute("width", qrSize);
+                        qrEl.setAttribute("height", qrSize);
+                        qrEl.setAttribute("dots-type", "rounded");
+                        qrEl.setAttribute("corners-square-type", "extra-rounded");
+                        qrEl.setAttribute("background-color", "#ffffff");
+                        qrEl.setAttribute("dots-color", "#000000");
+                        qrContainer.appendChild(qrEl);
+                    }
+
+                    const invoiceInput = document.getElementById("tipInvoiceInput");
+                    if (invoiceInput) invoiceInput.value = data.invoice;
+
+                    const status = document.getElementById("tipStatus");
+                    if (status) {
+                        status.textContent = "Scan with your wallet to send " + amount + " sats";
+                        status.className = "nes-text is-success";
+                        status.style.display = "block";
+                    }
+
+                    tryLightningUri(data.invoice);
+
+
+                } catch (e) {
+                    const status = document.getElementById("tipStatus");
+                    if (status) {
+                        status.textContent = "Error: " + e.message;
+                        status.className = "nes-text is-error";
+                        status.style.display = "block";
+                    }
+                } finally {
+                    tipSendBtn.disabled = false;
+                    tipSendBtn.textContent = "Generate Invoice";
+                }
+            });
+        }
+
+        // Copy tip invoice
+        const tipCopyBtn = document.getElementById("tipCopyInvoiceBtn");
+        if (tipCopyBtn) {
+            tipCopyBtn.addEventListener("click", function() {
+                const invoiceInput = document.getElementById("tipInvoiceInput");
+                if (invoiceInput && invoiceInput.value) {
+                    navigator.clipboard.writeText(invoiceInput.value).then(function() {
+                        const copied = document.getElementById("tipInvoiceCopied");
+                        if (copied) {
+                            copied.style.display = "inline";
+                            setTimeout(function() { copied.style.display = "none"; }, 2000);
+                        }
+                    }).catch(function() {});
+                }
+            });
+        }
+
+        // Tip back button
+        const tipBackBtn = document.getElementById("tipBackBtn");
+        if (tipBackBtn) {
+            tipBackBtn.addEventListener("click", function() {
+                var addressStep = document.getElementById("tipAddressStep");
+                var invoiceStep = document.getElementById("tipInvoiceStep");
+                if (addressStep) addressStep.style.display = "block";
+                if (invoiceStep) invoiceStep.style.display = "none";
+            });
+        }
+
         // Logout
         const logoutBtn = document.getElementById("logoutBtn");
         if (logoutBtn) logoutBtn.addEventListener("click", () => this.handleLogout());
@@ -518,6 +664,12 @@ class AuthClient {
         this.updateAuthUI();
 
         window.dispatchEvent(new CustomEvent("auth:logout"));
+
+        // Navigate to home screen
+        const navHome = document.getElementById("nav-home-link");
+        if (navHome) {
+            navHome.click();
+        }
     }
 
     async createAuthHeader(url, method, body) {
@@ -611,13 +763,11 @@ class AuthClient {
             })
         );
 
-        // After login/register, go straight to the game if on the home page
-        // Use HTMX swap to preserve JS auth state (full reload loses username sessions)
-        if (window.location.pathname === "/") {
-            const mainContent = document.getElementById("main-content");
-            if (mainContent && window.htmx) {
-                htmx.ajax("GET", "/play", { target: "#main-content", swap: "innerHTML" });
-                history.pushState({}, "", "/play");
+        // After login/register, navigate to home unless already on the game page
+        if (window.location.pathname !== "/" && window.location.pathname !== "/play") {
+            const navHome = document.getElementById("nav-home-link");
+            if (navHome) {
+                navHome.click();
             }
         }
 

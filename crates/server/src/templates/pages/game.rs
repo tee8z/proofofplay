@@ -1,4 +1,4 @@
-use maud::{html, Markup};
+use maud::{html, Markup, PreEscaped};
 
 use crate::templates::layouts::base::{base, PageConfig};
 
@@ -20,20 +20,37 @@ pub fn game_content(
     plays_ttl_minutes: i64,
     prize_pool_pct: u8,
 ) -> Markup {
+    // Serialize the default engine config for practice mode
+    let default_engine_config =
+        serde_json::to_string(&game_engine::config::GameConfig::default_config())
+            .unwrap_or_else(|_| "{}".to_string());
+
     html! {
+        // Embed default config for practice mode JS
+        script {
+            (PreEscaped(format!("window.DEFAULT_ENGINE_CONFIG = '{}';", default_engine_config.replace('\'', "\\'"))))
+        }
         div id="game-section" {
             div id="start-screen" class="nes-container is-dark" {
                 div class="start-content" {
                     h1 class="nes-text is-primary" { "Proof of Play" }
                     p class="nes-text is-warning" { "Get ready to play!" }
                     p id="playsRemainingDisplay" class="nes-text is-success" style="display: none;" {}
-                    button class="nes-btn is-primary" id="startGameBtn" {
-                        "Start Game"
+                    div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;" {
+                        button class="nes-btn is-primary" id="startGameBtn" {
+                            "Start Game"
+                        }
+                        button class="nes-btn" id="practiceBtn" {
+                            "Practice"
+                        }
                     }
                 }
             }
 
             div class="game-container nes-container is-dark" style="display: none;" {
+                p id="practiceModeIndicator" class="nes-text is-warning" style="display: none; text-align: center; font-size: 0.7em; margin-bottom: 4px;" {
+                    "PRACTICE MODE — scores will not be submitted"
+                }
                 div class="game-ui nes-container is-rounded is-dark" {
                     div class="nes-text is-primary" {
                         "LIVES: " span id="lives" { "♦ ♦ ♦" }
@@ -81,16 +98,21 @@ pub fn game_content(
                     h2 class="nes-text is-error" { "GAME OVER" }
                     p { "Final Score: " span id="final-score" { "0" } }
                     p id="gameOverPlaysRemaining" class="nes-text is-success" style="display: none;" {}
-                    button type="button" id="restart-button" class="nes-btn is-primary" {
-                        "Play Again"
-                    }
-                    a href="/leaderboard"
-                      class="nes-btn is-warning"
-                      id="view-leaderboard-button"
-                      hx-get="/leaderboard"
-                      hx-target="#main-content"
-                      hx-push-url="true" {
-                        "View Leaderboard"
+                    div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;" {
+                        button type="button" id="restart-button" class="nes-btn is-primary" {
+                            "Play Again"
+                        }
+                        button type="button" id="play-for-real-button" class="nes-btn is-success" style="display: none;" {
+                            "Play for Real"
+                        }
+                        a href="/leaderboard"
+                          class="nes-btn is-warning"
+                          id="view-leaderboard-button"
+                          hx-get="/leaderboard"
+                          hx-target="#main-content"
+                          hx-push-url="true" {
+                            "View Leaderboard"
+                        }
                     }
                 }
             }

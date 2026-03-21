@@ -1,4 +1,8 @@
-use axum::{extract::State, http::HeaderMap, response::Html};
+use axum::{
+    extract::State,
+    http::{HeaderMap, StatusCode},
+    response::{Html, IntoResponse},
+};
 use log::warn;
 use std::sync::Arc;
 
@@ -25,6 +29,7 @@ pub async fn home_handler(headers: HeaderMap, State(state): State<Arc<AppState>>
         plays_per_payment: state.settings.competition_settings.plays_per_payment,
         plays_ttl_minutes: state.settings.competition_settings.plays_ttl_minutes,
         prize_pool_pct: state.settings.competition_settings.prize_pool_pct,
+        tip_address: state.settings.competition_settings.tip_address.as_deref(),
     };
 
     if headers.contains_key("hx-request") {
@@ -53,6 +58,7 @@ pub async fn game_handler(headers: HeaderMap, State(state): State<Arc<AppState>>
         plays_per_payment: state.settings.competition_settings.plays_per_payment,
         plays_ttl_minutes: state.settings.competition_settings.plays_ttl_minutes,
         prize_pool_pct: state.settings.competition_settings.prize_pool_pct,
+        tip_address: state.settings.competition_settings.tip_address.as_deref(),
     };
 
     if headers.contains_key("hx-request") {
@@ -102,6 +108,7 @@ pub async fn leaderboard_handler(
         plays_per_payment: state.settings.competition_settings.plays_per_payment,
         plays_ttl_minutes: state.settings.competition_settings.plays_ttl_minutes,
         prize_pool_pct: state.settings.competition_settings.prize_pool_pct,
+        tip_address: state.settings.competition_settings.tip_address.as_deref(),
     };
 
     if headers.contains_key("hx-request") {
@@ -125,6 +132,23 @@ pub async fn leaderboard_rows_handler(State(state): State<Arc<AppState>>) -> Htm
             vec![]
         });
     Html(fragments::leaderboard_rows::leaderboard_rows(&scores).into_string())
+}
+
+/// Serve the service worker from root path (SW scope must be /)
+pub async fn serve_service_worker(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let sw_path = std::path::Path::new(&state.settings.ui_settings.static_dir).join("sw.js");
+    match tokio::fs::read_to_string(&sw_path).await {
+        Ok(content) => (
+            StatusCode::OK,
+            [
+                ("content-type", "application/javascript"),
+                ("service-worker-allowed", "/"),
+            ],
+            content,
+        )
+            .into_response(),
+        Err(_) => (StatusCode::NOT_FOUND, "Service worker not found").into_response(),
+    }
 }
 
 /// Fragment: navbar (for HTMX swap after auth state change)

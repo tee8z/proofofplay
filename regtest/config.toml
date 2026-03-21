@@ -33,9 +33,10 @@ start_time = "00:00"
 # 300 = 5 min, 3600 = 1h, 86400 = 24h
 duration_secs = 300
 entry_fee_sats = 100
-plays_per_payment = 5
+plays_per_payment = 3
 plays_ttl_minutes = 0
 prize_pool_pct = 80
+tip_address = "dev@localhost:9090"
 
 [bot_detection]
 enabled = false

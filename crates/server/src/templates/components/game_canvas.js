@@ -25,17 +25,45 @@ let timingSamples = [];
 let canvas, ctx, scoreElement, levelElement, timeElement, livesElement;
 let gameOverDialog, finalScoreElement, restartButton;
 
-// Sound effects
-const sounds = { shoot: new Audio(), explosion: new Audio(), levelUp: new Audio() };
-try {
-    sounds.shoot.src = "https://www.soundjay.com/mechanical/sounds/laser-gun-19.mp3";
-    sounds.explosion.src = "https://www.soundjay.com/mechanical/sounds/explosion-01.mp3";
-    sounds.levelUp.src = "https://www.soundjay.com/mechanical/sounds/beep-07.mp3";
-    Object.values(sounds).forEach((s) => { s.volume = 0.3; });
-} catch (e) { /* sounds are optional */ }
+// Sound effects — synthesized via Web Audio API (no external files needed)
+let audioCtx = null;
+function getAudioCtx() {
+    if (!audioCtx) {
+        try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+        catch (e) { /* audio not available */ }
+    }
+    return audioCtx;
+}
+
+const sounds = {
+    explosion: function() {
+        const ctx = getAudioCtx();
+        if (!ctx) return;
+        // White noise burst with low-pass filter for an explosion effect
+        const duration = 0.4;
+        const buf = ctx.createBuffer(1, ctx.sampleRate * duration, ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < data.length; i++) {
+            data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+        }
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        const filter = ctx.createBiquadFilter();
+        filter.type = "lowpass";
+        filter.frequency.setValueAtTime(1000, ctx.currentTime);
+        filter.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + duration);
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+        src.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+        src.start();
+    },
+};
 
 function playSound(sound) {
-    if (sound) { sound.currentTime = 0; sound.play().catch(() => {}); }
+    if (typeof sound === "function") { try { sound(); } catch (e) { /* optional */ } }
 }
 
 function initializeElements() {
@@ -57,11 +85,49 @@ function initializeElements() {
     if (restartButton) {
         restartButton.addEventListener("click", function () {
             if (gameOverDialog) gameOverDialog.style.display = "none";
+            if (practiceMode) {
+                startPracticeMode();
+            } else {
+                startGame();
+            }
+        });
+    }
+
+    var playForRealBtn = document.getElementById("play-for-real-button");
+    if (playForRealBtn) {
+        playForRealBtn.addEventListener("click", function () {
+            if (gameOverDialog) gameOverDialog.style.display = "none";
+            practiceMode = false;
             startGame();
         });
     }
+
     console.log("Game elements initialized successfully");
     return true;
+}
+
+// Practice mode — play without login, payment, or score submission
+let practiceMode = false;
+
+function startPracticeMode() {
+    console.log("Starting practice mode...");
+    practiceMode = true;
+
+    // Generate a random seed locally
+    const seedHex = Array.from(crypto.getRandomValues(new Uint8Array(8)))
+        .map(b => b.toString(16).padStart(2, "0")).join("");
+
+    // Use default engine config (embedded by server in page)
+    const engineConfig = window.DEFAULT_ENGINE_CONFIG || "{}";
+
+    startGameWithConfig({
+        config: {
+            sessionId: "practice_" + Date.now(),
+            seed: seedHex,
+            engineConfig: engineConfig,
+        },
+        plays_remaining: 999,
+    });
 }
 
 function startGame() {
@@ -71,6 +137,7 @@ function startGame() {
         return;
     }
 
+    practiceMode = false;
     console.log("Starting game...");
     const startGameBtn = document.getElementById("startGameBtn");
     if (startGameBtn) {
@@ -151,6 +218,12 @@ function startGameWithConfig(sessionData) {
     lastTimingSample = 0;
     timingSamples = [];
     pendingGameStart = false;
+
+    // Show/hide practice mode indicator
+    const practiceIndicator = document.getElementById("practiceModeIndicator");
+    if (practiceIndicator) {
+        practiceIndicator.style.display = practiceMode ? "block" : "none";
+    }
 
     // Start the fixed-timestep game loop
     if (gameInterval) clearInterval(gameInterval);
@@ -361,7 +434,7 @@ async function handleGameOver(state) {
 
     if (finalScoreElement) finalScoreElement.textContent = state.score;
 
-    if (window.gameAuth && window.gameAuth.isLoggedIn() && sessionId && recorder) {
+    if (!practiceMode && window.gameAuth && window.gameAuth.isLoggedIn() && sessionId && recorder) {
         const gameTime = Math.floor((Date.now() - gameStartTime) / 1000);
         const inputLog = recorder.finish(); // Uint8Array
         const frameCount = recorder.frame_count();
@@ -384,6 +457,20 @@ async function handleGameOver(state) {
         }
 
         await submitScore(state.score, state.level, gameTime, inputLogBase64, inputHash, frameCount, frameTimingsB64);
+    }
+
+    // In practice mode, show a note that the score wasn't saved
+    const gameOverPlays = document.getElementById("gameOverPlaysRemaining");
+    if (practiceMode && gameOverPlays) {
+        gameOverPlays.textContent = "Practice mode — score not submitted";
+        gameOverPlays.className = "nes-text is-warning";
+        gameOverPlays.style.display = "block";
+    }
+
+    // Show "Play for Real" button in practice mode
+    var playForRealBtn = document.getElementById("play-for-real-button");
+    if (playForRealBtn) {
+        playForRealBtn.style.display = practiceMode ? "inline-block" : "none";
     }
 
     if (gameOverDialog) gameOverDialog.style.display = "block";
@@ -493,11 +580,25 @@ window.addEventListener("auth:logout", function () {
     recorder = null;
 });
 
-// Setup start game button
+// Setup start game button and practice buttons
 function setupStartGameButton() {
     const startGameBtn = document.getElementById("startGameBtn");
     if (startGameBtn) {
         startGameBtn.addEventListener("click", startGame);
+    }
+    // Practice button on the game page
+    const practiceBtn = document.getElementById("practiceBtn");
+    if (practiceBtn) {
+        practiceBtn.addEventListener("click", startPracticeMode);
+    }
+    // Practice buttons on the home page — flag practice mode before HTMX navigates to /play
+    for (const id of ["homePracticeBtn", "homePracticeBtn2"]) {
+        const btn = document.getElementById(id);
+        if (btn) {
+            btn.addEventListener("click", function() {
+                window._startPracticeAfterSwap = true;
+            });
+        }
     }
 }
 
@@ -519,6 +620,12 @@ document.body.addEventListener("htmx:afterSwap", function () {
     initializeElements();
     setupStartGameButton();
     setupTouchControls();
+
+    // Auto-start practice mode if flagged from home page
+    if (window._startPracticeAfterSwap && document.getElementById("practiceBtn")) {
+        window._startPracticeAfterSwap = false;
+        setTimeout(startPracticeMode, 100);
+    }
 });
 
 // Update plays remaining display

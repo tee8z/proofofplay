@@ -4,6 +4,14 @@ pub fn navbar() -> Markup {
     html! {
         div class="nav-bar" {
             div class="nav-bar-left" {
+                a href="/"
+                  id="nav-home-link"
+                  class="nes-btn is-warning"
+                  hx-get="/"
+                  hx-target="#main-content"
+                  hx-push-url="true" {
+                    "Home"
+                }
                 a href="/leaderboard"
                   class="nes-btn is-primary"
                   hx-get="/leaderboard"

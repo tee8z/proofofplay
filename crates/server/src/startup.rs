@@ -47,8 +47,9 @@ use crate::{
     },
     run_competition_task,
     secrets::get_key,
-    start_new_session, submit_score, update_lightning_address, GameStore, LedgerService,
-    LedgerStore, LightningProvider, LightningService, LndClient, PaymentStore, UserStore,
+    serve_service_worker, start_new_session, submit_score, update_lightning_address, GameStore,
+    LedgerService, LedgerStore, LightningProvider, LightningService, LndClient, PaymentStore,
+    UserStore,
 };
 pub struct Application {
     server: Serve<
@@ -254,7 +255,9 @@ pub fn app(app_state: AppState, serve_dir: ServeDir) -> Router {
         .route("/replays/top", get(get_top_replays))
         .route("/replay/{score_id}", get(get_replay_by_score));
 
-    let payment_endpoints = Router::new().route("/status/{payment_id}", get(check_payment_status));
+    let payment_endpoints = Router::new()
+        .route("/status/{payment_id}", get(check_payment_status))
+        .route("/tip", post(crate::create_tip_invoice));
 
     let prize_endpoints = Router::new()
         .route("/check", get(check_prize_eligibility))
@@ -291,6 +294,7 @@ pub fn app(app_state: AppState, serve_dir: ServeDir) -> Router {
         .nest("/api/v1/ledger", ledger_endpoints)
         .nest_service("/ui", serve_dir.clone())
         .nest_service("/static", static_serve)
+        .route("/sw.js", get(serve_service_worker))
         .fallback(index_handler)
         .layer(middleware::from_fn(log_request))
         .with_state(Arc::new(app_state))
@@ -304,7 +308,8 @@ async fn log_request(request: Request<Body>, next: Next) -> impl IntoResponse {
         .path_and_query()
         .map(|p| p.as_str())
         .unwrap_or_default();
-    info!(target: "http_request","new request, {} {}", request.method().as_str(), path);
+    let is_htmx = request.headers().contains_key("hx-request");
+    info!(target: "http_request","new request, {} {} (htmx={})", request.method().as_str(), path, is_htmx);
 
     let response = next.run(request).await;
     let response_time = time::OffsetDateTime::now_utc() - now;

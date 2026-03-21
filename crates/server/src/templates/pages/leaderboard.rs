@@ -25,14 +25,6 @@ pub fn leaderboard_content(
             h2 class="nes-text is-primary" { "LEADERBOARD" }
 
             div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px;" {
-                a href="/"
-                  class="nes-btn is-warning"
-                  hx-get="/"
-                  hx-target="#main-content"
-                  hx-push-url="true" {
-                    "Back to Home"
-                }
-
                 div class="nes-container is-rounded" style="padding: 8px 16px; display: inline-block;" {
                     span class="nes-text is-success" style="font-size: 1.1em;" {
                         "Prize Pool: " (prize_pool_sats) " sats"

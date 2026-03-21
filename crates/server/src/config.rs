@@ -158,6 +158,10 @@ pub struct CompetitionSettings {
     pub plays_ttl_minutes: i64,
     /// Prize pool percentage (0-100) — remainder goes to server
     pub prize_pool_pct: u8,
+    /// Lightning address for tipping the developers (shown in footer).
+    /// If empty, tip link is hidden.
+    #[serde(default)]
+    pub tip_address: Option<String>,
 }
 
 impl CompetitionSettings {
@@ -217,6 +221,7 @@ impl Default for CompetitionSettings {
             plays_per_payment: 5,
             plays_ttl_minutes: 60,
             prize_pool_pct: 80,
+            tip_address: None,
         }
     }
 }

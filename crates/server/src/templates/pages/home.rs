@@ -76,7 +76,7 @@ pub fn home_content(
             }
 
             p class="nes-text is-warning" style="margin-top: 20px;" {
-                "Please login or register to play!"
+                "Please login or register to compete!"
             }
             div class="auth-buttons-container" id="home-auth-cta" {
                 button class="nes-btn is-primary" id="startLoginBtn" {
@@ -84,6 +84,12 @@ pub fn home_content(
                 }
                 button class="nes-btn is-success" id="startRegisterBtn" {
                     "Sign Up"
+                }
+                button class="nes-btn" id="homePracticeBtn"
+                  hx-get="/play"
+                  hx-target="#main-content"
+                  hx-push-url="true" {
+                    "Practice"
                 }
             }
             div class="auth-buttons-container is-hidden" id="home-play-cta" {
@@ -93,6 +99,12 @@ pub fn home_content(
                   hx-target="#main-content"
                   hx-push-url="true" {
                     "Play Game"
+                }
+                button class="nes-btn" id="homePracticeBtn2"
+                  hx-get="/play"
+                  hx-target="#main-content"
+                  hx-push-url="true" {
+                    "Practice"
                 }
             }
         }

@@ -481,11 +481,11 @@ impl GameState {
             return false;
         }
 
+        self.lives = self.lives.saturating_sub(1);
         if self.lives == 0 {
             self.game_over = true;
             return true;
         }
-        self.lives -= 1;
         self.ship.x = self.config.canvas_width * Fixed::HALF;
         self.ship.y = self.config.canvas_height * Fixed::HALF;
         self.ship.velocity_x = Fixed::ZERO;

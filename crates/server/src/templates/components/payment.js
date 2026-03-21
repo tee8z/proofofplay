@@ -1,5 +1,18 @@
 // Payment handler for Lightning invoice display and polling
 
+// Try to open a lightning: URI on mobile devices where a wallet app may handle it.
+// Skipped on desktop to avoid "unknown protocol" errors.
+function tryLightningUri(invoice) {
+    if (!invoice) return;
+    var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (!isMobile) return;
+    var iframe = document.createElement("iframe");
+    iframe.style.display = "none";
+    iframe.src = "lightning:" + invoice;
+    document.body.appendChild(iframe);
+    setTimeout(function() { document.body.removeChild(iframe); }, 2000);
+}
+
 class PaymentHandler {
     constructor() {
         this.currentPaymentId = null;
@@ -113,18 +126,13 @@ class PaymentHandler {
             this.paymentStatus.innerHTML = statusHtml;
         }
 
-        // Auto-open lightning: URI to trigger the user's wallet app.
-        // This is a no-op on desktop browsers without a handler, which is fine —
-        // they'll use the QR code or copy the invoice instead.
-        try {
-            window.location.assign("lightning:" + paymentData.invoice);
-        } catch (e) {
-            // Silently ignore — not all browsers support lightning: URIs
-        }
 
         if (this.paymentModal) this.paymentModal.style.display = "block";
 
         this.startPaymentCheck();
+
+        // Attempt to open wallet app on mobile after modal is visible
+        tryLightningUri(paymentData.invoice);
     }
 
     hidePaymentModal() {
@@ -270,9 +278,10 @@ if (document.readyState === "loading") {
     }
 }
 
-// Re-initialize after HTMX swaps
+// Re-initialize after HTMX swaps (always re-init to grab fresh DOM elements)
 document.body.addEventListener("htmx:afterSwap", function () {
-    if (window.gamePayment && !window.gamePayment.initialized) {
+    if (window.gamePayment) {
+        window.gamePayment.initialized = false;
         window.gamePayment.init();
     }
 });

@@ -450,7 +450,8 @@ input[type="password"] {
         height: 100dvh;
     }
 
-    body.game-active .nav-bar {
+    body.game-active .nav-bar,
+    body.game-active .site-footer {
         display: none;
     }
 
@@ -732,6 +733,22 @@ input[type="password"] {
 
 .stat-value {
     font-size: 0.85em;
+}
+
+.site-footer {
+    text-align: center;
+    padding: 16px;
+    margin-top: 24px;
+    font-size: 0.7em;
+    opacity: 0.6;
+}
+
+.site-footer:hover {
+    opacity: 1;
+}
+
+.site-footer a {
+    text-decoration: none;
 }
 
 .has-text-centered {

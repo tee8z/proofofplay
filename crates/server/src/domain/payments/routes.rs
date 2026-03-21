@@ -15,6 +15,60 @@ use crate::{
     startup::AppState,
 };
 
+/// Request a tip invoice for the dev's lightning address via LNURL.
+/// No auth required — anyone can tip.
+#[derive(Debug, Deserialize)]
+pub struct TipRequest {
+    pub amount_sats: i64,
+}
+
+pub async fn create_tip_invoice(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<TipRequest>,
+) -> Result<impl IntoResponse, Response> {
+    let tip_address = state
+        .settings
+        .competition_settings
+        .tip_address
+        .as_deref()
+        .ok_or_else(|| (StatusCode::NOT_FOUND, "Tipping is not configured").into_response())?;
+
+    if request.amount_sats < 1 || request.amount_sats > 1_000_000 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Amount must be between 1 and 1,000,000 sats",
+        )
+            .into_response());
+    }
+
+    info!(
+        "Tip invoice request: {} sats to {}",
+        request.amount_sats, tip_address
+    );
+
+    let http_client = crate::startup::build_reqwest_client();
+    let invoice =
+        get_invoice_from_lightning_address(&http_client, tip_address, request.amount_sats)
+            .await
+            .map_err(|e| {
+                error!("Failed to resolve tip address {}: {}", tip_address, e);
+                (
+                    StatusCode::BAD_GATEWAY,
+                    format!("Failed to create tip invoice: {}", e),
+                )
+                    .into_response()
+            })?;
+
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "invoice": invoice,
+            "amount_sats": request.amount_sats,
+            "address": tip_address,
+        })),
+    ))
+}
+
 // Get the status of a payment
 pub async fn check_payment_status(
     auth: NostrAuth,

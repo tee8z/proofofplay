@@ -14,6 +14,7 @@ pub async fn index_handler(State(state): State<Arc<AppState>>) -> Html<String> {
         plays_per_payment: state.settings.competition_settings.plays_per_payment,
         plays_ttl_minutes: state.settings.competition_settings.plays_ttl_minutes,
         prize_pool_pct: state.settings.competition_settings.prize_pool_pct,
+        tip_address: state.settings.competition_settings.tip_address.as_deref(),
     };
     let content = maud::html! {
         div class="nes-container is-dark" style="text-align: center; margin-top: 40px;" {
