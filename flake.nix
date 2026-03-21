@@ -47,7 +47,8 @@
             || (builtins.match ".*\\.html$" path != null)
             || (builtins.match ".*\\.js$" path != null)
             || (builtins.match ".*\\.css$" path != null)
-            || (builtins.match ".*\\.svg$" path != null);
+            || (builtins.match ".*\\.svg$" path != null)
+            || (builtins.match ".*/\\.sqlx/.*" path != null);
         };
 
         # Common environment variables

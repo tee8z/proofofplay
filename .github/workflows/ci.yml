@@ -212,8 +212,8 @@ jobs:
 
       - name: Build WASM modules
         run: |
-          wasm-pack build crates/nostr_signer --target web --release --out-dir ../public_ui/pkg/nostr_signer
-          wasm-pack build crates/game_engine --target web --release --out-dir ../public_ui/pkg/game_engine
+          wasm-pack build crates/nostr_signer --target web --release --out-dir ../../ui/pkg/nostr_signer
+          wasm-pack build crates/game_engine --target web --release --out-dir ../../ui/pkg/game_engine
 
       - name: Verify static files were built
         run: |
